@@ -1,0 +1,67 @@
+# version: '3.9'
+# services:
+#   frontend:
+#     build:
+#       context: .
+#       dockerfile: docker/Dockerfile.frontend
+#     ports:
+#       - '5173:5173'
+
+#   backend:
+#     build:
+#       context: .
+#       dockerfile: docker/Dockerfile.backend
+#     ports:
+#       - '3000:3000'
+services:
+  mongodb:
+    image: mongo:7
+    container_name: medai-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: medai-connect
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.backend
+    container_name: medai-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/medai-connect
+      - PORT=5000
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - mongodb
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: medai-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  mongo-data:
+
+environment:
+  - MONGODB_URI=mongodb://mongodb:27017/medai-connect
+  - PORT=5000
+  - CHOKIDAR_USEPOLLING=true
