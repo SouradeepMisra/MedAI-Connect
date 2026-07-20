@@ -1,18 +1,5 @@
-# version: '3.9'
-# services:
-#   frontend:
-#     build:
-#       context: .
-#       dockerfile: docker/Dockerfile.frontend
-#     ports:
-#       - '5173:5173'
+version: '3.9'
 
-#   backend:
-#     build:
-#       context: .
-#       dockerfile: docker/Dockerfile.backend
-#     ports:
-#       - '3000:3000'
 services:
   mongodb:
     image: mongo:7
@@ -36,6 +23,7 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/medai-connect
       - PORT=5000
+      - CHOKIDAR_USEPOLLING=true
     env_file:
       - ./backend/.env
     depends_on:
@@ -60,8 +48,3 @@ services:
 
 volumes:
   mongo-data:
-
-environment:
-  - MONGODB_URI=mongodb://mongodb:27017/medai-connect
-  - PORT=5000
-  - CHOKIDAR_USEPOLLING=true

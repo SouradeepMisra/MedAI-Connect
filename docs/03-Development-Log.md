@@ -3,7 +3,7 @@ Version       : 1.0
 Author        : Souradeep Misra
 Status        : Living document (update as the project progresses)
 Created Date  : 18 July 2026
-Last Updated  : 18 July 2026
+Last Updated  : 19 July 2026
 
 # Development Log — MedAI Connect
 
@@ -61,7 +61,7 @@ machine. Docker Desktop started normally afterward.
 ## 3. Project folder structure
 
 ```
-MedAI-Connect1/
+MedAI-Connect/
 ├── .github/workflows/     → CI pipeline definition (ci.yml)
 ├── backend/               → Express + TypeScript API, its own package.json
 │   ├── src/
@@ -150,6 +150,47 @@ instead of starting each manually. Key details worth remembering:
 Deliberate simplification for now — avoids adding a build step on top of everything else being
 learned at once. Documented decision: revisit and add a proper compiled production build stage
 once the app works end-to-end.
+
+### 5.1 Debugging notes — patient registration endpoint (18 July 2026)
+
+**Issue 1 — new route returned 404 despite correct code:**
+Created `patientRoutes.ts` and updated `index.ts` to wire it in, but calling
+`POST /api/patients/register` returned `Cannot POST /api/patients/register`. On review, both
+files were correct — the actual cause was that `ts-node-dev`'s file-watcher never picked up the
+change. Windows-to-Docker bind mounts (`./backend:/app`) don't reliably deliver native
+file-change notifications across the Windows → WSL2 → Linux container boundary, especially for
+newly created files. The container kept running its previous in-memory version of `index.ts`.
+
+**Fix:** added `CHOKIDAR_USEPOLLING=true` to the backend service's environment variables, which
+makes the watcher actively poll for file changes on an interval instead of relying on native
+OS notifications. Slightly less efficient, but reliable in this Windows+Docker setup.
+
+**Issue 2 — the polling fix didn't take effect on the first attempt:**
+The `environment:` block containing `CHOKIDAR_USEPOLLING=true` was added at the very bottom of
+`docker-compose.yml`, outside any service definition — a sibling to `services:` and `volumes:`
+rather than nested inside `backend:`. In YAML, indentation defines structure; an unindented
+block at the file's root is a separate top-level key, which Docker Compose doesn't recognize
+and silently ignores (no error is raised for unknown top-level keys). Lesson: YAML mistakes
+like this fail silently rather than throwing an error, so structure/indentation is worth
+double-checking whenever a config change doesn't seem to take effect.
+
+**Fix:** merged `CHOKIDAR_USEPOLLING=true` into the existing `environment:` list already nested
+under the `backend:` service, rather than creating a second, separate `environment:` key.
+
+**Issue 3 — renaming the project folder (`MedAI-Connect1` → `MedAI-Connect`) didn't update
+Docker's references:**
+Docker Compose automatically names containers, images, and its internal project grouping based
+on the folder name at the time `docker compose up` is first run (e.g. `medai-connect1-backend-1`).
+Renaming the folder afterward doesn't rename anything Docker already created — the old
+containers/images remained, disconnected from the renamed folder.
+
+**Fix:** ran `docker compose down` from the new folder path, pruned the old, now-unused
+containers and images (`docker container prune`, `docker image prune`, plus explicit `docker rm`
+for anything not caught by prune), then rebuilt fresh with `docker compose up --build` — this
+created new containers correctly namespaced under `medai-connect`.
+
+**Outcome:** `POST /api/patients/register` now returns `201 Created` with a real MongoDB-generated
+`_id`, confirming the full chain (Express → Mongoose → MongoDB) works end-to-end.
 
 ---
 

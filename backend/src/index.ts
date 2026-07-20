@@ -20,6 +20,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import patientRoutes from './routes/patientRoutes';
+import doctorRoutes from './routes/doctorRoutes';
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 
 app.use(express.json());
 app.use('/api/patients', patientRoutes);
+app.use('/api/doctors', doctorRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'medai-connect-backend' });
