@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+
 import { Doctor } from '../models/Doctor';
+import { verifyToken, requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
 
@@ -16,7 +18,7 @@ function generateTempPassword(): string {
   return crypto.randomBytes(6).toString('base64url'); // URL-safe, no confusing symbols
 }
 
-router.post('/', async (req, res) => {
+router.post('/', verifyToken, requireRole('admin'), async (req, res) => {
   try {
     const { name, registrationNumber, degree, specialization, experience } = req.body;
 
