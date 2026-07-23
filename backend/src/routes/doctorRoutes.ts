@@ -4,6 +4,7 @@ import crypto from 'crypto';
 
 import { Doctor } from '../models/Doctor';
 import { verifyToken, requireRole } from '../middleware/authMiddleware';
+import { upload } from '../middleware/uploadMiddleware';
 
 const router = Router();
 
@@ -17,6 +18,54 @@ function generateLoginId(): string {
 function generateTempPassword(): string {
   return crypto.randomBytes(6).toString('base64url'); // URL-safe, no confusing symbols
 }
+
+router.post('/register', upload.single('document'), async (req, res) => {
+  try {
+    console.log('DEBUG req.body:', req.body);
+    console.log('DEBUG req.file:', req.file);
+    const { name, registrationNumber, degree, specialization, experience, password } = req.body;
+
+    if (!name || !registrationNumber || !degree || !specialization || !experience || !password) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'A registration document is required' });
+    }
+
+    const existingDoctor = await Doctor.findOne({ registrationNumber });
+    if (existingDoctor) {
+      return res.status(409).json({ error: 'A doctor with this registration number already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newDoctor = new Doctor({
+      name,
+      registrationNumber,
+      degree,
+      specialization,
+      experience,
+      password: hashedPassword,
+      documentPath: req.file.path,
+      verificationStatus: 'Pending',
+    });
+
+    await newDoctor.save();
+
+    res.status(201).json({
+      message: 'Registration submitted. Your account is pending admin verification.',
+      doctor: {
+        id: newDoctor._id,
+        name: newDoctor.name,
+        verificationStatus: newDoctor.verificationStatus,
+      },
+    });
+  } catch (error) {
+    console.error('Doctor registration error:', error);
+    res.status(500).json({ error: 'Something went wrong during registration' });
+  }
+});
 
 router.post('/', verifyToken, requireRole('admin'), async (req, res) => {
   try {

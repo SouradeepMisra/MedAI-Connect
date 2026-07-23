@@ -3,7 +3,7 @@ Version       : 1.0
 Author        : Souradeep Misra
 Status        : Living document (update as the project progresses)
 Created Date  : 18 July 2026
-Last Updated  : 19 July 2026
+Last Updated  : 22 July 2026
 
 # Development Log — MedAI Connect
 
@@ -238,6 +238,63 @@ real booking/ticketing systems.
 1. Phase 1 — hardcode a doctor's availability manually; get booking + atomic increment working end-to-end first.
 2. Phase 2 — add the `doctorAvailability` template and auto-generate 15-minute slots from it.
 3. Phase 3 — add the `breaks` array (lunch/personal time blocking) to the generation logic.
+
+### 7.1 Design pivot — doctor onboarding (updated after initial build)
+
+**Original PRD:** doctors are created exclusively by the admin, who generates their login ID
+and password.
+
+**Revised approach:** doctors self-register (name, registration number, degree, specialization,
+experience) and upload a supporting document (registration/degree certificate). An AI/OCR step
+extracts details from the uploaded document and cross-checks them against the submitted form
+data, flagging mismatches. The doctor account is created in a `Pending` status; an admin
+reviews the AI's extraction and flags, then makes the final approve/reject decision.
+
+**Why:** removes the admin bottleneck for onboarding at scale (more realistic of how real
+platforms like Practo grow), and turns the AI feature set into genuine document-processing
+work rather than only a chat interface — a stronger differentiator for the project overall.
+
+**Why not fully automated verification:** no public API exists for real medical registry
+verification in most jurisdictions, so this is necessarily a simulated check (matching
+extracted document text against form input) rather than confirmation against a government
+database. Automated approval of medical credentials without human review would also be
+irresponsible even if a real registry API existed — a human admin makes the final call in
+every case; AI only assists that decision.
+
+**Sequencing:** built in phases — (1) self-registration + document upload with manual admin
+review, (2) add AI/OCR extraction shown to the admin, (3) add automatic mismatch flagging.
+
+### 7.2 Debugging notes — doctor self-registration with file upload (18 July 2026)
+
+Building the self-registration endpoint (`POST /api/doctors/register`, multipart form with a
+document upload via Multer) surfaced three separate, layered issues before it worked correctly.
+
+**Issue 1 — `400 All fields are required` despite every field being filled in Postman:**
+Cause: a manually-set `Content-Type` header (left over from an earlier JSON-based request)
+was present, preventing Postman from sending the correct auto-generated multipart boundary.
+Without a valid boundary, Multer couldn't parse the incoming form at all, so every field in
+`req.body` came back empty.
+
+**Issue 2 — new error, `Cannot destructure property 'name' of req.body as it is undefined`,
+after "fixing" issue 1:**
+Cause: the fix for Issue 1 disabled the *correct* auto-generated `Content-Type` header
+(mistaking it for a stray duplicate), rather than removing an actual duplicate. With no
+`Content-Type`/boundary sent at all, Multer skipped parsing entirely, leaving `req.body`
+completely undefined rather than an empty object. Lesson: on multipart requests, Postman's
+auto-generated `Content-Type` header (containing the boundary) must stay enabled — it should
+never be manually edited or disabled.
+
+**Issue 3 — `400 All fields are required` again, after re-enabling the header:**
+Cause: a single trailing space in the form-data key (`'password '` instead of `'password'`).
+Confirmed by temporarily logging the raw `req.body` object, which revealed the key exactly as
+received. Since JavaScript treats `password` and `password ` as entirely different property
+names, destructuring `password` from the body silently returned `undefined`. Lesson: when a
+field "looks" correct in a UI but validation still fails, log the raw object rather than
+re-checking the UI visually — invisible characters (trailing spaces, etc.) won't show up by eye.
+
+**Outcome:** `POST /api/doctors/register` now correctly accepts profile fields + a document
+upload, hashes the password, stores the file under `uploads/doctor-documents/`, and creates the
+doctor record with `verificationStatus: "Pending"`.
 
 ---
 
