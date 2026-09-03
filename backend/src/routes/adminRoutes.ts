@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { Doctor } from '../models/Doctor';
-import { verifyToken, requireRole } from '../middleware/authMiddleware';
+import { verifyToken, requireRole, AuthenticatedRequest } from '../middleware/authMiddleware';
 import { generateUniqueLoginId, generateTempPassword } from '../utils/credentialGenerator';
+import { verifyDoctorDocument } from '../services/aiVerificationService';
 
 const router = Router();
 
@@ -14,12 +15,57 @@ router.use(verifyToken, requireRole('admin'));
 router.get('/doctors/pending', async (req, res) => {
   try {
     const pendingDoctors = await Doctor.find({ verificationStatus: 'Pending' }).select(
-      'name registrationNumber degree specialization experience documentPath createdAt'
+      'name registrationNumber degree specialization experience documentPath createdAt aiVerification.status'
     );
     res.status(200).json({ doctors: pendingDoctors });
   } catch (error) {
     console.error('Fetch pending doctors error:', error);
     res.status(500).json({ error: 'Something went wrong while fetching pending doctors' });
+  }
+});
+
+// Full detail for a single doctor — used when an admin opens one review,
+// to see submitted profile data alongside any AI verification results.
+router.get('/doctors/:id', async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id).select('-password');
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    res.status(200).json({ doctor });
+  } catch (error) {
+    console.error('Fetch doctor detail error:', error);
+    res.status(500).json({ error: 'Something went wrong while fetching the doctor' });
+  }
+});
+
+// Runs the AI document check on-demand (an admin explicitly triggers this
+// while reviewing a doctor) and persists the result. Re-running overwrites
+// the previous result. This never changes verificationStatus itself —
+// approve/reject stays a manual admin decision either way.
+router.post('/doctors/:id/verify-document', async (req: AuthenticatedRequest, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const result = await verifyDoctorDocument(doctor);
+
+    doctor.aiVerification = {
+      ...result,
+      checkedAt: new Date(),
+      checkedBy: req.user?.id,
+    } as any;
+    await doctor.save();
+
+    res.status(200).json({ message: 'AI verification complete', aiVerification: doctor.aiVerification });
+  } catch (error) {
+    console.error('AI document verification route error:', error);
+    res.status(500).json({ error: 'Something went wrong while running the AI verification' });
   }
 });
 
