@@ -13,3 +13,6 @@ pnpm-debug.log*
 
 # Build output
 /dist
+
+# Uploaded files
+/uploads/
