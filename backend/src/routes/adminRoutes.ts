@@ -83,19 +83,28 @@ router.patch('/doctors/:id/approve', async (req, res) => {
     }
 
     const loginId = await generateUniqueLoginId();
-    const tempPassword = generateTempPassword();
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
     doctor.loginId = loginId;
-    doctor.password = hashedPassword;
+
+    // Self-registered doctors already chose and hashed their own password at
+    // registration — only generate a temp one for the (currently unused, but
+    // schema-supported) case of a doctor with no password set yet, so
+    // approval never discards a password the doctor already chose.
+    let tempPassword: string | undefined;
+    if (!doctor.password) {
+      tempPassword = generateTempPassword();
+      doctor.password = await bcrypt.hash(tempPassword, 10);
+    }
+
     doctor.verificationStatus = 'Approved';
     await doctor.save();
 
     res.status(200).json({
       message: 'Doctor approved successfully',
       doctor: { id: doctor._id, name: doctor.name, loginId: doctor.loginId },
-      // Returned once — in a real system this would be emailed, not shown in the response.
-      temporaryPassword: tempPassword,
+      // Only present when a temp password was actually generated — in a real
+      // system this would be emailed, not shown in the response. Otherwise
+      // the doctor logs in with the password they chose at registration.
+      ...(tempPassword ? { temporaryPassword: tempPassword } : {}),
     });
   } catch (error) {
     console.error('Doctor approval error:', error);

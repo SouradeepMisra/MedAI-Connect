@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { openai } from '../utils/openaiClient';
+import { getOpenAIClient } from '../utils/openaiClient';
 import { Doctor } from '../models/Doctor';
 
 const SUPPORTED_IMAGE_TYPES: Record<string, string> = {
@@ -74,7 +74,7 @@ export async function verifyDoctorDocument(
     const imageBuffer = fs.readFileSync(doctor.documentPath);
     const base64Image = imageBuffer.toString('base64');
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAIClient().chat.completions.create({
       model,
       messages: [
         {
