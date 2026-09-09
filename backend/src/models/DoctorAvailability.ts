@@ -29,10 +29,12 @@ const doctorAvailabilitySchema = new mongoose.Schema(
     slotDurationMinutes: {
       type: Number,
       default: 15,
+      min: 1, // a non-positive value would make slot generation loop forever
     },
     maxPatientsPerSlot: {
       type: Number,
       default: 1,
+      min: 1,
     },
     blockedDates: [Date], // doctor-blocked holidays
   },

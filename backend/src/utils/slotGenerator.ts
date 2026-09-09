@@ -5,6 +5,12 @@ export function getCandidateTimes(
   endTime: string,
   slotDurationMinutes: number
 ): string[] {
+  // A non-positive duration would make the loop below never terminate —
+  // guard here too, not just at the call sites that validate input.
+  if (!Number.isFinite(slotDurationMinutes) || slotDurationMinutes < 1) {
+    return [];
+  }
+
   const [startHour, startMinute] = startTime.split(':').map(Number);
   const [endHour, endMinute] = endTime.split(':').map(Number);
 

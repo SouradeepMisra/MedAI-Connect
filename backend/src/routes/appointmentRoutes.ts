@@ -5,7 +5,7 @@ import { Slot } from '../models/Slot';
 import { Appointment } from '../models/Appointment';
 import { verifyToken, requireRole, AuthenticatedRequest } from '../middleware/authMiddleware';
 import { getCandidateTimes } from '../utils/slotGenerator';
-import { ensureSlot, claimSlot } from '../utils/slotBooking';
+import { ensureSlot, claimSlot, releaseSlot } from '../utils/slotBooking';
 
 const router = Router();
 
@@ -20,14 +20,24 @@ function normalizeDate(dateInput: string): Date | null {
   return normalized;
 }
 
-function isWithinBookingWindow(date: Date): boolean {
+function startOfTodayUTC(): Date {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
+  return today;
+}
+
+function isWithinBookingWindow(date: Date): boolean {
+  const today = startOfTodayUTC();
 
   const maxDate = new Date(today);
   maxDate.setUTCDate(maxDate.getUTCDate() + BOOKING_WINDOW_DAYS);
 
   return date >= today && date <= maxDate;
+}
+
+function currentUTCTimeString(): string {
+  const now = new Date();
+  return `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
 }
 
 type BookableResult =
@@ -68,11 +78,20 @@ async function getBookableCandidateTimes(doctorId: string, date: Date): Promise<
     return { ok: true, doctor, availability, candidateTimes: [] };
   }
 
-  const candidateTimes = getCandidateTimes(
+  let candidateTimes = getCandidateTimes(
     scheduleEntry.startTime,
     scheduleEntry.endTime,
     availability.slotDurationMinutes
   );
+
+  // The date-level window check only rejects past calendar days — without
+  // this, an already-passed time slot earlier today would stay bookable for
+  // the rest of the day. Filtering here (rather than only in the booking
+  // route) keeps /slots and /book from ever disagreeing about what's open.
+  if (date.getTime() === startOfTodayUTC().getTime()) {
+    const nowTime = currentUTCTimeString();
+    candidateTimes = candidateTimes.filter((time) => time > nowTime);
+  }
 
   return { ok: true, doctor, availability, candidateTimes };
 }
@@ -132,7 +151,12 @@ router.post('/book', verifyToken, requireRole('patient'), async (req: Authentica
     }
 
     const minBookingAmount = Number(process.env.MIN_BOOKING_AMOUNT) || 100;
-    if (Number(amount) < minBookingAmount) {
+    const numericAmount = Number(amount);
+    // Number(...) on non-numeric input (e.g. "abc") is NaN, and every
+    // comparison against NaN is false — so a plain `< minBookingAmount`
+    // check would silently let garbage input through. Number.isFinite
+    // rejects NaN (and Infinity) explicitly.
+    if (!Number.isFinite(numericAmount) || numericAmount < minBookingAmount) {
       return res.status(400).json({ error: `A minimum booking amount of ${minBookingAmount} is required` });
     }
 
@@ -162,15 +186,24 @@ router.post('/book', verifyToken, requireRole('patient'), async (req: Authentica
       return res.status(409).json({ error: 'This slot is fully booked' });
     }
 
-    const appointment = await Appointment.create({
-      patient: req.user!.id,
-      doctor: doctorId,
-      slot: claimed._id,
-      date,
-      time,
-      amount,
-      status: 'Booked',
-    });
+    let appointment;
+    try {
+      appointment = await Appointment.create({
+        patient: req.user!.id,
+        doctor: doctorId,
+        slot: claimed._id,
+        date,
+        time,
+        amount: numericAmount,
+        status: 'Booked',
+      });
+    } catch (createError) {
+      // The seat was already atomically claimed above. Since no appointment
+      // actually got created, release it back rather than leaving the slot
+      // permanently short one seat with nothing to show for it.
+      await releaseSlot(claimed._id.toString());
+      throw createError;
+    }
 
     res.status(201).json({ message: 'Appointment booked', appointment });
   } catch (error) {

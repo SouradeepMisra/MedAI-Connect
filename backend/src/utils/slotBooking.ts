@@ -41,3 +41,11 @@ export async function claimSlot(
     { new: true }
   );
 }
+
+// Compensating action for when a seat was claimed but the booking couldn't
+// actually be completed (e.g. Appointment.create failed after claimSlot
+// succeeded) — without this, a failed booking would permanently consume a
+// seat with no appointment to show for it.
+export async function releaseSlot(slotId: string): Promise<void> {
+  await Slot.findOneAndUpdate({ _id: slotId, bookedCount: { $gt: 0 } }, { $inc: { bookedCount: -1 } });
+}

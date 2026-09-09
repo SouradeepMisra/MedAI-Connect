@@ -32,15 +32,33 @@ router.post('/availability', async (req: AuthenticatedRequest, res) => {
       }
     }
 
+    // A non-positive slotDurationMinutes would make slot generation loop
+    // forever, and a non-positive maxPatientsPerSlot would make every slot
+    // permanently unbookable — a plain truthiness check lets a negative
+    // number slip through, so these need explicit range checks.
+    if (
+      slotDurationMinutes !== undefined &&
+      (typeof slotDurationMinutes !== 'number' || slotDurationMinutes < 1)
+    ) {
+      return res.status(400).json({ error: 'slotDurationMinutes must be a positive number' });
+    }
+
+    if (
+      maxPatientsPerSlot !== undefined &&
+      (typeof maxPatientsPerSlot !== 'number' || maxPatientsPerSlot < 1)
+    ) {
+      return res.status(400).json({ error: 'maxPatientsPerSlot must be a positive number' });
+    }
+
     const availability = await DoctorAvailability.findOneAndUpdate(
       { doctor: req.user!.id },
       {
         doctor: req.user!.id,
         weeklySchedule,
-        ...(slotDurationMinutes ? { slotDurationMinutes } : {}),
-        ...(maxPatientsPerSlot ? { maxPatientsPerSlot } : {}),
+        ...(slotDurationMinutes !== undefined ? { slotDurationMinutes } : {}),
+        ...(maxPatientsPerSlot !== undefined ? { maxPatientsPerSlot } : {}),
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     );
 
     res.status(200).json({ message: 'Availability saved', availability });
