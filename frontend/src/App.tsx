@@ -7,6 +7,7 @@ import { DoctorProfilePage } from './pages/DoctorProfilePage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { MyAppointmentsPage } from './pages/MyAppointmentsPage';
+import { ChatPage } from './pages/ChatPage';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/register" element={<RegisterPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/my-appointments" element={<MyAppointmentsPage />} />
+              <Route path="/chat" element={<ChatPage />} />
             </Route>
           </Routes>
         </div>

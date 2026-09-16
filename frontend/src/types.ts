@@ -29,3 +29,9 @@ export interface Appointment {
   amount: number;
   status: 'Booked' | 'Cancelled' | 'Completed';
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}

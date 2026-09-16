@@ -24,6 +24,9 @@ export function Navbar() {
             <Link to="/my-appointments" className="text-slate-600 hover:text-slate-900">
               My Appointments
             </Link>
+            <Link to="/chat" className="text-slate-600 hover:text-slate-900">
+              AI Symptom Chat
+            </Link>
             <span className="text-slate-500">Hi, {patient.name}</span>
             <button
               type="button"

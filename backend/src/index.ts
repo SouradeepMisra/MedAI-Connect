@@ -26,6 +26,7 @@ import authRoutes from './routes/authRoutes';
 import adminRoutes from './routes/adminRoutes';
 import doctorAvailabilityRoutes from './routes/doctorAvailabilityRoutes';
 import appointmentRoutes from './routes/appointmentRoutes';
+import chatRoutes from './routes/chatRoutes';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/doctor', doctorAvailabilityRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'medai-connect-backend' });
