@@ -35,3 +35,52 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
 }
+
+export interface Admin {
+  id: string;
+  name: string;
+  email: string;
+}
+
+type MatchVerdict = 'match' | 'mismatch' | 'uncertain';
+
+export interface AiVerification {
+  status: 'NotRun' | 'Completed' | 'Failed';
+  modelUsed?: string;
+  extractedName?: string;
+  extractedRegistrationNumber?: string;
+  extractedDegree?: string;
+  nameMatch?: MatchVerdict;
+  registrationNumberMatch?: MatchVerdict;
+  degreeMatch?: MatchVerdict;
+  concerns?: string[];
+  summary?: string;
+  errorMessage?: string;
+  checkedAt?: string;
+}
+
+export interface PendingDoctor {
+  _id: string;
+  name: string;
+  registrationNumber: string;
+  degree: string;
+  specialization: string;
+  experience: number;
+  documentPath: string;
+  createdAt: string;
+  aiVerification?: { status: AiVerification['status'] };
+}
+
+export interface DoctorDetail {
+  _id: string;
+  name: string;
+  registrationNumber: string;
+  degree: string;
+  specialization: string;
+  experience: number;
+  loginId?: string;
+  documentPath: string;
+  verificationStatus: 'Pending' | 'Approved' | 'Rejected';
+  isActivated: boolean;
+  aiVerification?: AiVerification;
+}

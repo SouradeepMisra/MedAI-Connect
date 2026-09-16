@@ -1,11 +1,20 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import { Doctor } from '../models/Doctor';
 import { verifyToken, requireRole, AuthenticatedRequest } from '../middleware/authMiddleware';
 import { generateUniqueLoginId, generateTempPassword } from '../utils/credentialGenerator';
 import { verifyDoctorDocument } from '../services/aiVerificationService';
 
 const router = Router();
+
+const DOCUMENT_CONTENT_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.pdf': 'application/pdf',
+};
 
 // Every route below requires a valid admin token — applied once here
 // rather than repeating verifyToken/requireRole on each route individually.
@@ -38,6 +47,29 @@ router.get('/doctors/:id', async (req, res) => {
   } catch (error) {
     console.error('Fetch doctor detail error:', error);
     res.status(500).json({ error: 'Something went wrong while fetching the doctor' });
+  }
+});
+
+// Streams the doctor's uploaded document — admin-auth protected rather than
+// public static serving, since these are potentially sensitive registration
+// certificates. The frontend fetches this with an Authorization header and
+// renders the bytes as a blob, since a plain <img src> can't send one.
+router.get('/doctors/:id/document', async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+
+    if (!doctor || !fs.existsSync(doctor.documentPath)) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const ext = path.extname(doctor.documentPath).toLowerCase();
+    const contentType = DOCUMENT_CONTENT_TYPES[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.sendFile(path.resolve(doctor.documentPath));
+  } catch (error) {
+    console.error('Fetch doctor document error:', error);
+    res.status(500).json({ error: 'Something went wrong while fetching the document' });
   }
 });
 
