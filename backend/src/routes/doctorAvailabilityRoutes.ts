@@ -1,12 +1,46 @@
 import { Router } from 'express';
 import { Doctor } from '../models/Doctor';
 import { DoctorAvailability } from '../models/DoctorAvailability';
+import { Appointment } from '../models/Appointment';
 import { verifyToken, requireRole, AuthenticatedRequest } from '../middleware/authMiddleware';
 
 const router = Router();
 
 // Every route below is a doctor acting on their own profile.
 router.use(verifyToken, requireRole('doctor'));
+
+// The calling doctor's own full profile — neither the public doctor-listing
+// endpoint (Approved+isActivated only, minimal fields) nor the admin detail
+// endpoint (admin-auth only) work for a doctor viewing their own dashboard.
+router.get('/profile', async (req: AuthenticatedRequest, res) => {
+  try {
+    const doctor = await Doctor.findById(req.user!.id).select('-password');
+
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    res.status(200).json({ doctor });
+  } catch (error) {
+    console.error('Fetch doctor profile error:', error);
+    res.status(500).json({ error: 'Something went wrong while fetching the profile' });
+  }
+});
+
+// The calling doctor's own upcoming appointments — mirrors the patient-side
+// GET /api/appointments/my, just scoped to doctor and populating patient.
+router.get('/appointments', async (req: AuthenticatedRequest, res) => {
+  try {
+    const appointments = await Appointment.find({ doctor: req.user!.id })
+      .populate('patient', 'name email phone')
+      .sort({ date: 1, time: 1 });
+
+    res.status(200).json({ appointments });
+  } catch (error) {
+    console.error('Fetch doctor appointments error:', error);
+    res.status(500).json({ error: 'Something went wrong while fetching appointments' });
+  }
+});
 
 // Create or replace the calling doctor's recurring weekly availability template.
 router.post('/availability', async (req: AuthenticatedRequest, res) => {

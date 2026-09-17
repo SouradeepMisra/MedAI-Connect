@@ -19,9 +19,19 @@ export interface Slot {
   isFull: boolean;
 }
 
+// Shape of a populated `patient` reference on an Appointment
+// (backend selects "name email phone" — distinct from the Patient login
+// response shape, which uses `id` instead of `_id` and has no `phone`).
+export interface PopulatedPatient {
+  _id: string;
+  name: string;
+  email: string;
+  phone: string;
+}
+
 export interface Appointment {
   _id: string;
-  patient: string;
+  patient: PopulatedPatient | string;
   doctor: Doctor | string;
   slot: string;
   date: string;
@@ -83,4 +93,17 @@ export interface DoctorDetail {
   verificationStatus: 'Pending' | 'Approved' | 'Rejected';
   isActivated: boolean;
   aiVerification?: AiVerification;
+}
+
+export interface WeeklyScheduleEntry {
+  dayOfWeek: number; // 0 = Sunday ... 6 = Saturday
+  startTime: string; // "HH:mm"
+  endTime: string;
+}
+
+export interface DoctorAvailability {
+  weeklySchedule: WeeklyScheduleEntry[];
+  slotDurationMinutes: number;
+  maxPatientsPerSlot: number;
+  blockedDates: string[];
 }
