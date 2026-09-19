@@ -1,9 +1,9 @@
 Document Name : Development Log
-Version       : 1.0
+Version       : 2.0
 Author        : Souradeep Misra
 Status        : Living document (update as the project progresses)
 Created Date  : 18 July 2026
-Last Updated  : 22 July 2026
+Last Updated  : 20 September 2026
 
 # Development Log — MedAI Connect
 
@@ -89,6 +89,13 @@ containerized separately — mirrors how real multi-service projects are structu
 **Why `shared/types.ts` exists:**
 So both frontend and backend agree on the shape of core data (e.g. what fields an `Appointment`
 has) without duplicating the definition in two places and letting them drift out of sync.
+
+> **Update (20 Sept 2026): the layout above was the plan; the real repo differs.** `postman/` and
+> `screenshots/` were never created. `shared/types.ts` and `database/seed.js` are unused
+> placeholder stubs (their shapes don't match the real models, and nothing imports them), so the
+> frontend defines its own types in `frontend/src/types.ts`. There is no `.github/workflows/ci.yml`;
+> the only workflows are the two Claude Code review actions. The accurate, current tree is in the
+> [README](../README.md#project-structure).
 
 ---
 
@@ -298,17 +305,208 @@ doctor record with `verificationStatus: "Pending"`.
 
 ---
 
-## 8. Open decisions / things to revisit later
+## 8. AI document verification (PR #2, merged 6 Sept 2026)
 
-- [ ] Compile TypeScript to plain JS for a production build stage (currently running via `ts-node-dev` directly for simplicity).
-- [ ] Revisit upgrading to TypeScript 7 once `ts-node`/`ts-node-dev` support it.
-- [ ] Decide on payment handling for the "minimum booking amount" rule (real gateway vs. mocked/test-mode).
-- [ ] Decide where MongoDB will run for the live demo deployment (self-hosted container vs. MongoDB Atlas free tier).
-- [ ] Decide which LLM provider to use for the AI chat in the deployed demo (local Ollama has no cost but isn't publicly reachable; a cloud API is needed for a live link).
+**What:** an admin can run an AI check that reads a doctor's uploaded certificate and compares
+name / registration number / degree with what the doctor typed in. Endpoint:
+`POST /api/admin/doctors/:id/verify-document`; the result is stored in an embedded
+`aiVerification` object on the doctor.
+
+**Decisions**
+- **Vision LLM, not Tesseract/OCR.** A vision-capable model reads messy real-world scans more
+  robustly than classic OCR and reuses the `openai` SDK already installed. Trade-off: it costs
+  money per call and can be wrong, so the output is presented as *advice*.
+- **On-demand, not automatic.** Running it at registration would spend an API call on every
+  attempt, including spam and registrations nobody ever reviews. The admin clicks a button instead.
+- **Structured outputs (strict JSON schema)** so the response is always parseable, with a
+  three-way verdict per field (`match` / `mismatch` / `uncertain`) rather than a boolean, because
+  "the scan is blurry" is a real third state.
+- **It never changes `verificationStatus`.** Approve/reject stays a human decision. There is also no
+  public medical-registry API to check against, so this is a consistency check between the form
+  and the document, not real credential verification.
+- **Images only.** JPG/PNG go to the model. A PDF returns a clear "review manually" `Failed`
+  result rather than a guessed API call. (Rendering page 1 of a PDF to an image is the obvious fix.)
+- **Failures are data, not exceptions.** A bad key, network error or empty response is returned as
+  `status: "Failed"` with an `errorMessage`, so one flaky call can't break the review screen.
+- **Model name is configuration** (`OPENAI_VISION_MODEL`), not hard-coded, because model
+  line-ups change faster than this code.
+
+### 8.1 Debugging note: a schema change did not change the database (Sept 2026)
+Registering a second doctor failed with `E11000 duplicate key ... loginId: null`, even though the
+schema declared `loginId` as `unique` **and `sparse`**. Cause: the unique index had been created
+before `sparse: true` was added to the schema, and **Mongoose creates missing indexes but never
+alters an existing one**, so the database kept the old non-sparse index (two `null`s collide).
+Fix: drop `loginId_1` and let Mongoose rebuild it as sparse. Lesson: an index change is a
+*migration*, not just a schema edit. (Fresh databases are unaffected; the fix is in the
+[troubleshooting table](06-Setup-and-Run-Guide.md#6-troubleshooting).)
 
 ---
 
-## 9. How to keep this doc useful
+## 9. Booking core (PR #3, merged 9 Sept 2026)
+
+**What:** `DoctorAvailability`, `Slot` and `Appointment`, plus doctor activation, slot listing and
+atomic booking. Implements phases 1 and 2 of the plan in section 7; phase 3 (lunch/break
+blocking inside a day) is still deferred.
+
+**Decisions**
+- **Template, not pre-generated slots.** A doctor stores a weekly pattern; a `Slot` document is
+  created only when a specific date+time is first touched. The database stays small and a doctor
+  changing their template doesn't require rewriting a month of rows. Capacity is copied onto the
+  slot when created so later template edits can't retroactively change an existing slot.
+- **Two-step atomic booking.** `ensureSlot` (upsert, protected by the unique index
+  `(doctor, date, time)`) then `claimSlot` (`findOneAndUpdate` with `bookedCount < max` and `$inc`).
+  Splitting them keeps the contended step a *pure conditional increment* with no upsert in it. If
+  two requests race to create the same slot, the loser gets `E11000` and simply re-reads it.
+  Verified with two simultaneous requests for one seat: one `201`, one `409`.
+- **Compensation.** If `Appointment.create` fails after a seat was claimed, `releaseSlot` gives it
+  back (there is no multi-document transaction; this is the simpler equivalent).
+- **Activation gate.** The PRD ties "activate" to first-time setup, and the `isActivated` flag
+  already existed unused. A doctor must save availability before activating, and only
+  Approved + Activated doctors are listed or bookable.
+- **30-day window** (PRD: "only for a month"), and **payment is mocked**: the amount is validated
+  against `MIN_BOOKING_AMOUNT`, no gateway. (This closes the "payment handling" open decision.)
+
+---
+
+## 10. What the automated PR review caught (PRs #2 and #3)
+
+Every PR runs the Claude Code review action. On these two it found real defects, all confirmed by
+reading the code and fixed on the same branch before merge. This is the most useful record of
+"bugs that looked fine".
+
+| # | Finding | Fix |
+|---|---|---|
+| PR #2 | **Plaintext passwords in server logs.** A leftover debug `console.log(req.body)` in the registration route wrote every doctor's password before it was hashed. | Removed the debug logging. |
+| PR #2 | **Approval overwrote the doctor's own password** with a freshly generated one, so the password chosen at registration could never be used. A leftover from the old admin-creates-everything design. | Approve only generates a temporary password when the doctor has none. |
+| PR #2 | **A newly required field broke a dead route.** Making `documentPath` required broke the old admin-creates-doctor endpoint, which the docs said had been retired but was still mounted. | Deleted the dead route and its duplicate helper functions. |
+| PR #2 | **OpenAI client built at import time**, before `dotenv.config()` ran, so a key that lived only in `.env` would crash server start-up outside Docker (Docker masked it by injecting env vars first). | Lazy `getOpenAIClient()` created on first use. |
+| PR #3 | **Negative `slotDurationMinutes` caused an infinite loop.** The route only truthiness-checked it, so `-15` passed; the slot generator then never terminated, and since it's reachable from the public slots endpoint and Node is single-threaded, one bad record could freeze the whole server. | Range checks in the route, `min: 1` in the schema plus `runValidators` on the upsert (validators don't run on `findOneAndUpdate` by default), and a guard in the loop itself. |
+| PR #3 | **`NaN` bypassed the minimum-amount check** (`Number("abc") < 100` is `false`), and the seat had already been claimed before the failed insert, permanently burning capacity. | `Number.isFinite` validation before anything is claimed, plus `releaseSlot` compensation. |
+| PR #3 | **Times that had already passed today were still bookable**, because the window check only compared calendar days. | Filtered in the shared candidate-times helper, so `/slots` and `/book` can never disagree. |
+
+Takeaways: validate numeric input with `Number.isFinite`, not just comparisons; "the docs say it's
+gone" is not the same as "it's gone"; and defence in depth (route validation *and* schema *and* the
+loop guard) is cheap for anything reachable from an unauthenticated endpoint.
+
+---
+
+## 11. Patient frontend (PR #4, merged 15 Sept 2026)
+
+First UI. Before this, every feature had only been exercised with Postman/curl.
+
+**Two blockers surfaced by trying to build it** (both small backend changes, not scope creep):
+1. **No public doctor listing existed.** The only list endpoint was admin-only, so a patient UI had no
+   way to discover a `doctorId`. Added public `GET /api/doctors` (search + specialization) and
+   `GET /api/doctors/:id`, limited to Approved + Activated doctors.
+2. **CORS had never been wired up** even though the `cors` package was installed since the first
+   day (section 4 lists it). Every browser call would have been blocked. Added `cors()` restricted to
+   `FRONTEND_URL`.
+
+**Decisions:** React Router; Tailwind CSS v4 through the `@tailwindcss/vite` plugin (no PostCSS
+config); plain `fetch` behind one small typed wrapper and React Context for auth, with no
+Redux/React-Query, since the app is small; scope limited to the patient flow so the PR stayed
+reviewable (doctor and admin UIs followed separately).
+
+**Gotcha: stale `node_modules` in Docker.** After adding dependencies, the frontend container
+crash-looped with `Cannot find package '@tailwindcss/vite'`. Compose mounts an anonymous volume at
+`/app/node_modules`, and `--build` alone does not replace an existing anonymous volume. Fix:
+`docker compose up -d --build --force-recreate -V frontend` (`-V` renews anonymous volumes).
+
+**Verification approach:** a headless-Chromium (Playwright) script drives the real UI against the
+live backend and takes screenshots. Twice a "failure" turned out to be the *test script*: a text
+selector matched the navbar as well as the page heading, so an assertion passed before navigation
+actually happened. Lesson: assert on specific roles/URLs, and look at the screenshots.
+
+---
+
+## 12. AI symptom-guidance chat (PR #5, merged 16 Sept 2026)
+
+- **One ongoing conversation per patient** (`ChatLog`, messages embedded), matching the data-model
+  note in section 7. New threads per topic are a later extension.
+- **Separate `OPENAI_CHAT_MODEL`** rather than reusing the vision-model setting, since this is plain
+  text; a cheaper small model is appropriate for chat.
+- **Safety is a design requirement, not boilerplate.** The system prompt limits the assistant to
+  general triage-level guidance: never a diagnosis, never a specific medication or dose, explicit
+  "seek emergency care now" for red-flag symptoms, always steer toward a real doctor. The UI
+  repeats this in a permanent disclaimer, because the prompt alone isn't visible to the user.
+- **Cost and abuse bounds:** only the last 20 messages go to the model (full history stays in Mongo)
+  and messages are capped at 1000 characters.
+- **A failed AI call persists nothing**, so history never contains a one-sided turn the patient
+  never got an answer to. The UI shows an inline retry message.
+- *Status:* verified end to end with a placeholder key (the failure path). The success path needs a
+  real key; see [Setup & Run Guide](06-Setup-and-Run-Guide.md#4-openai-api-key).
+
+---
+
+## 13. Admin dashboard (PR #6, merged 16 Sept 2026)
+
+Makes the flagship AI feature demoable in a browser: verification queue, review page (profile,
+certificate, AI result), approve/reject.
+
+- **The certificate had no way to be viewed.** No static serving existed, and serving the uploads
+  folder publicly would leak sensitive documents to anyone who guessed a filename. Added an
+  admin-only `GET /api/admin/doctors/:id/document`. Because `<img src>` can't send an
+  `Authorization` header, the page fetches the bytes as a blob and displays them with
+  `URL.createObjectURL` (revoked on unmount). PDFs get a download link.
+- **Separate `AdminAuthContext`** (its own localStorage key) instead of generalising the already
+  verified patient context, to avoid touching working code that has no automated tests.
+- The approve endpoint returns a temporary password only when generated; the UI shows the Login ID
+  and any temporary password in a persistent callout, not a toast, since it can't be retrieved again.
+
+---
+
+## 14. Doctor dashboard (PR #7, merged 18 Sept 2026)
+
+- **Two more missing endpoints**, both required: `GET /api/doctor/profile` (a doctor couldn't view
+  their own profile before activation; the public and admin endpoints don't fit) and
+  `GET /api/doctor/appointments` (the PRD asks for it; only the patient-side one existed).
+- **The availability form replaces the whole template on save**, mirroring the backend's upsert
+  semantics, instead of pretending to support per-day incremental edits it can't.
+- **Activation button mirrors the backend gate** (disabled until availability exists).
+- This is the **third** parallel auth context (patient, admin, doctor). Three copies of the same ~60
+  lines is the point where extracting one generic implementation starts to pay off.
+- "No availability yet" is a legitimate `404` from the API; the client treats it as an empty state,
+  so it appears as a 404 in the browser network tab without being an error.
+
+---
+
+## 15. How things were verified, and the limits of that
+
+- API behaviour: `curl` against the running stack, including negative cases (bad role, bad input,
+  the concurrent-booking race).
+- UI behaviour: Playwright scripts against the live frontend and backend, with screenshots reviewed by
+  eye, plus a cross-role run (doctor sets availability → patient books → doctor sees the booking).
+- Every run cleaned up its own test data.
+- **There is no automated test suite.** Two placeholder smoke tests exist (they only check that files
+  are present); `backend/npm test` is the default "no test specified" stub, and `frontend/npm test`
+  currently fails because a CommonJS `require` sits inside an ES-module package. Real integration
+  tests are the top roadmap item, so verification stays repeatable.
+- The AI *success* paths have not been exercised against a live model, only the failure paths (a
+  placeholder key). Do that first when a real key is configured.
+
+---
+
+## 16. Open decisions / things to revisit later
+
+Resolved since the last update:
+- [x] **Payment handling** for the minimum booking amount: *decided, mocked.* The amount is validated only; no gateway in v1 (section 9).
+- [x] **LLM provider for the deployed demo:** *decided, OpenAI cloud API.* A local model isn't publicly reachable. A real key still has to be configured (see the Setup & Run Guide).
+
+Still open:
+- [ ] **Deployment target and MongoDB hosting** (a hosted Atlas free cluster is the likely answer for the database; the app hosts are being compared).
+- [ ] **Where uploaded certificates live.** Local disk is lost on hosts with an ephemeral filesystem; needs object storage, storing the file in MongoDB, or a persistent volume.
+- [ ] **Rate limiting**, especially on `POST /api/chat/message` and `verify-document`, before any public deployment (anyone can register and call the AI).
+- [ ] Compile TypeScript to plain JS for a production build stage (the containers still run `ts-node-dev` / the Vite dev server).
+- [ ] Revisit upgrading the backend to TypeScript 7 once `ts-node`/`ts-node-dev` support it (the backend is pinned to 5.9; the frontend already builds on 6.x).
+- [ ] Automated tests (backend integration, plus a small end-to-end suite).
+- [ ] Doctor self-registration form in the UI (API-only today).
+- [ ] Cancel/reschedule with the 48-hour rule; patient OTP login; admin user directory, emergency appointment management and reports; doctor notifications and holiday unblocking.
+- [ ] Extract a shared generic auth context now that three exist.
+- [ ] Remove or adopt the unused `shared/types.ts` and `database/seed.js` stubs.
+
+---
+
+## 17. How to keep this doc useful
 
 Add a new dated entry (or update the relevant section above) whenever:
 - A new dependency is added and there's a *reason* it was chosen over an alternative.

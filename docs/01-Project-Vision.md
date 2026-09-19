@@ -1,10 +1,10 @@
 Document Name : Project Vision
-Version       : 1.0
+Version       : 2.0
 Author        : Souradeep Misra
 Reviewer      : ChatGPT (Technical Architect)
-Status        : Draft
+Status        : Living document (v1 delivered)
 Created Date  : 30 June 2026
-Last Updated  : 30 June 2026
+Last Updated  : 20 September 2026
 
 # Project Name
 
@@ -46,4 +46,32 @@ Doctors struggle to
 
 ## Project Goal
 
-Build a scalable healthcare appointment platform using Angular, Node.js, MongoDB, Docker and AI integration.
+Build a scalable healthcare appointment platform using React, Node.js, MongoDB, Docker and AI integration.
+
+> **Change from the original draft:** this said *Angular*. The stack moved to **React** early in the build so the project would demonstrate the React skills being developed while leaning on existing Node/MongoDB/Docker strength. The reasoning is in [Development Log section 1](03-Development-Log.md#1-stack-decision).
+
+---
+
+## Guiding principles
+
+These shaped the decisions recorded in the [Development Log](03-Development-Log.md):
+
+1. **AI assists, a human decides.** AI reads a certificate and flags mismatches for an admin; it does not approve doctors. The symptom assistant gives general guidance and always points to a real doctor. No autonomous decisions on anything medical.
+2. **Correctness where it matters.** Double booking is the classic failure of an appointment system, so booking is a single atomic database operation rather than check-then-write.
+3. **Simple and defensible over clever.** Plain `fetch` + Context instead of a state-management stack, on-demand AI calls instead of automatic ones, tightly scoped PRs.
+4. **Honest about limits.** Mocked payment, no OTP, no cancellation yet: each is written down, not hidden.
+
+## What has been delivered (v1)
+
+| Area | Delivered |
+|---|---|
+| Patient | Register/login, doctor search and filter, profile, slot browsing (30 days), booking, booking history, AI symptom-guidance chat |
+| Doctor | Self-registration with certificate upload, approved login, dashboard, weekly availability and holiday blocking, activation, appointment list |
+| Admin | Verification queue, certificate viewer, on-demand AI document check, approve/reject |
+| Platform | Concurrency-safe booking, role-based JWT auth, Docker Compose environment, automated AI code review on every PR |
+
+Requirement-by-requirement status is in the [Product Requirement Document](02-Product-Requirement-Document.md#implementation-status); how the pieces fit together is in [Architecture](04-Architecture.md).
+
+## What is next
+
+Cancel/reschedule, patient OTP login, the remaining admin tools (user directory, emergency appointment management, reports), a doctor registration form in the UI, automated tests, and a public deployment. See the README roadmap.

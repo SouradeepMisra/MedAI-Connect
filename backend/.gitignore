@@ -16,3 +16,6 @@ pnpm-debug.log*
 
 # Uploaded files
 /uploads/
+
+# Committed template - copy to .env and fill in real values
+!.env.example
