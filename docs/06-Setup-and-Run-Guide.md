@@ -67,11 +67,16 @@ It prints `Admin created: admin@medai.com / ChangeThisPassword123`, or `Admin al
 ```bash
 docker compose up -d                 # start in the background
 docker compose logs -f backend       # follow backend logs
-docker compose restart backend       # restart one service
+docker compose restart backend       # restart one service (code changes only - see note below)
+docker compose up -d --force-recreate backend   # restart AND re-read backend/.env
 docker compose down                  # stop and remove containers (data is kept)
 docker compose down -v               # ALSO delete the MongoDB volume (wipes all data)
 docker compose exec mongodb mongosh medai-connect      # open a Mongo shell
 ```
+
+`restart` does **not** re-read `backend/.env` - it only restarts the existing container with
+whatever environment it was created with. After editing `.env`, use the `--force-recreate`
+command above instead (see the [troubleshooting table](#6-troubleshooting) if this bites you).
 
 Source folders are bind-mounted into the containers, so edits to `backend/src` and `frontend/src` reload automatically. Uploaded doctor documents land in `backend/uploads/` on your own disk (gitignored), so they survive container restarts.
 
@@ -124,8 +129,8 @@ Google's Gemini API has a real no-credit-card free tier (via [Google AI Studio](
    ```
    OPENAI_API_KEY=your-gemini-api-key
    OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-   OPENAI_VISION_MODEL=gemini-2.5-flash-lite
-   OPENAI_CHAT_MODEL=gemini-2.5-flash-lite
+   OPENAI_VISION_MODEL=gemini-3.5-flash-lite
+   OPENAI_CHAT_MODEL=gemini-3.5-flash-lite
    ```
 3. **Use a Flash-Lite model, not plain Flash.** As of this writing, Flash models get a very small free daily quota (around 20 requests/day) while Flash-Lite models get a much larger one (around 500/day). Free-tier model names and limits change; confirm the current ones at https://ai.google.dev/gemini-api/docs/rate-limits before relying on a specific model.
 4. The compatibility endpoint must end exactly at `.../v1beta/openai/` (trailing slash included) - the SDK appends `/chat/completions` itself.
@@ -176,7 +181,9 @@ cd frontend && npm run build          # tsc -b + vite build
 | Registering a *second* doctor fails with `E11000 duplicate key ... loginId` | An old database has a non-sparse unique index on `loginId`. Drop it and let Mongoose rebuild it: `docker compose exec mongodb mongosh medai-connect --eval 'db.doctors.dropIndex("loginId_1")'`, then `docker compose restart backend`. A fresh database is not affected. |
 | AI check says `401 Incorrect API key provided` / chat says "Something went wrong" | `OPENAI_API_KEY` is still the placeholder or is wrong. See section 4, then restart the backend. |
 | AI check says `Unsupported file type` | Only JPG/PNG are read by the AI check. PDFs upload fine but must be reviewed manually. |
-| Using Gemini: the symptom chat works but the AI document check fails or returns nonsense | Image input through Gemini's OpenAI-compatibility endpoint has been reported as unreliable for some users/models (unconfirmed in this project - not yet tested against a real Gemini key). Try a different/newer `OPENAI_VISION_MODEL`; if it still doesn't work, the feature still fails cleanly - fall back to OpenAI for this one feature, or review documents manually. |
+| Chat/AI check still failing after editing `backend/.env`, but the values look right | `docker compose restart backend` does **not** re-read `env_file` - it restarts the existing container with whatever environment was captured when it was created, so edits to `.env` after that are silently ignored. Confirm what the container actually has (`docker compose exec backend env \| grep OPENAI`), and if it's stale, recreate the container instead: `docker compose up -d --force-recreate backend`. (This also invalidates any JWT already issued if you changed `JWT_SECRET` at the same time - just log in again.) |
+| Using Gemini: error says a model "is no longer available to new users" | Confirmed live in this project (Oct 2026): `gemini-2.5-flash-lite` was retired mid-build. Google's own error names the replacement - update `OPENAI_VISION_MODEL`/`OPENAI_CHAT_MODEL` to whatever it suggests (this doc currently recommends `gemini-3.5-flash-lite`) and recreate the backend container as above. Model free-tier line-ups change; this is expected to happen again. |
+| Using Gemini: error is `BadRequestError: 400 status code (no body)` with no further detail | The `openai` SDK couldn't parse Gemini's error response. Bypass it to see the real message: `curl -X POST "$OPENAI_BASE_URL/chat/completions" -H "Authorization: Bearer $OPENAI_API_KEY" -H "Content-Type: application/json" -d '{"model":"...","messages":[{"role":"user","content":"hi"}]}'` - in this project it turned out to be the deprecated-model error above. |
 | Doctor page: "Failed to load document" | The file is missing from `backend/uploads/doctor-documents/` (e.g. you cleared it). Re-register the doctor. |
 | Port already in use (`5173`, `5000`, `27017`) | Another process holds it. Stop it, or change the left side of the port mapping in `docker-compose.yml`. |
 | Warning: `the attribute 'version' is obsolete` | Harmless. Newer Compose ignores the field. |
