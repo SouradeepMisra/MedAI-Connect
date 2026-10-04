@@ -434,7 +434,7 @@ actually happened. Lesson: assert on specific roles/URLs, and look at the screen
 - **A failed AI call persists nothing**, so history never contains a one-sided turn the patient
   never got an answer to. The UI shows an inline retry message.
 - *Status:* verified end to end with a placeholder key (the failure path). The success path needs a
-  real key; see [Setup & Run Guide](06-Setup-and-Run-Guide.md#4-openai-api-key).
+  real key; see [Setup & Run Guide](06-Setup-and-Run-Guide.md#4-ai-provider-key).
 
 ---
 
@@ -470,7 +470,51 @@ certificate, AI result), approve/reject.
 
 ---
 
-## 15. How things were verified, and the limits of that
+## 15. Configurable AI provider, and a real Gemini key verified live (4 Oct 2026)
+
+The user didn't want to spend OpenAI's new $5 minimum just to try the two AI features. Added one
+optional env var, `OPENAI_BASE_URL`, so the existing `openai` SDK client can point at any
+OpenAI-compatible endpoint instead of only `api.openai.com` — Google Gemini's genuinely free tier
+(no card) was the target. Neither AI service needed to change; both already read model names from
+env and call the shared client.
+
+**Then it was actually tested against a real Gemini key, live — both features, not just the
+failure path this project had only ever verified before:**
+- Symptom chat: a real, correctly non-diagnostic reply came back and persisted to history.
+- Document verification (the uncertain one — vision + structured JSON output through a
+  compatibility layer): tested with a generated demo certificate, once with matching submitted
+  details and once with mismatched ones. Both the `match` and `mismatch` verdicts came back
+  correctly per field, plus a genuinely useful concern the model noticed on its own (a "demo
+  document" watermark). The previously-flagged risk — a forum report that image input might not
+  work through Gemini's OpenAI-compatible endpoint — **did not reproduce here**; it worked
+  cleanly on the first real attempt.
+
+Three real problems hit along the way, each now in the troubleshooting table:
+1. **The model name was already deprecated.** `gemini-2.5-flash-lite`, used when this feature was
+   built days earlier, had been retired for new users in the interim. Google's own error message
+   named the replacement (`gemini-3.5-flash-lite`), which worked immediately. Free-tier model
+   line-ups move fast; expect to do this again.
+2. **`docker compose restart` does not re-read `env_file`.** It restarts the existing container
+   with whatever environment was captured when it was *created* — so editing `backend/.env` and
+   restarting silently keeps using the old values. `docker compose exec backend env` showed the
+   stale `OPENAI_API_KEY`/model vars confirming this; `docker compose up -d --force-recreate backend`
+   is the actual fix. This project has used plain `restart` after `.env` edits dozens of times
+   before this session without ever hitting it, because until now every such edit happened to run
+   right after an `up --build` that recreated the container anyway for an unrelated reason
+   (new dependency, etc.) — this is the first time an env-only edit was tested in isolation.
+3. **The `openai` SDK couldn't parse Gemini's error response** for the deprecated-model case,
+   surfacing only `BadRequestError: 400 status code (no body)`. Calling the compatibility
+   endpoint directly with `curl` (bypassing the SDK) revealed Google's actual, informative error
+   message. Lesson repeated from earlier in this log (the multipart-upload debugging saga):
+   when a library's error handling goes quiet, go around it and look at the raw response.
+
+Also fixed in passing: `backend/.env` had carried a duplicate `JWT_SECRET` line since the very
+start of the project (section 2) — never actually breaking anything since dotenv deterministically
+used whichever line came last, but exactly the footgun the Setup Guide already warned about. Removed.
+
+---
+
+## 16. How things were verified, and the limits of that
 
 - API behaviour: `curl` against the running stack, including negative cases (bad role, bad input,
   the concurrent-booking race).
@@ -481,21 +525,22 @@ certificate, AI result), approve/reject.
   are present); `backend/npm test` is the default "no test specified" stub, and `frontend/npm test`
   currently fails because a CommonJS `require` sits inside an ES-module package. Real integration
   tests are the top roadmap item, so verification stays repeatable.
-- The AI *success* paths have not been exercised against a live model, only the failure paths (a
-  placeholder key). Do that first when a real key is configured.
+- The AI success paths were failure-path-only verified for most of this project's history; section 15
+  closes that gap against a real (free) key.
 
 ---
 
-## 16. Open decisions / things to revisit later
+## 17. Open decisions / things to revisit later
 
 Resolved since the last update:
 - [x] **Payment handling** for the minimum booking amount: *decided, mocked.* The amount is validated only; no gateway in v1 (section 9).
-- [x] **LLM provider for the deployed demo:** *decided, OpenAI cloud API.* A local model isn't publicly reachable. A real key still has to be configured (see the Setup & Run Guide).
+- [x] **LLM provider for the deployed demo:** *decided, OpenAI-compatible API, with Google Gemini's free tier as the default recommendation* (section 15) rather than requiring OpenAI's now-paid-only access. A local model isn't publicly reachable.
+- [x] **Real AI key configured and both success paths verified live** (section 15) — previously only the failure path had ever been tested.
 
 Still open:
 - [ ] **Deployment target and MongoDB hosting** (a hosted Atlas free cluster is the likely answer for the database; the app hosts are being compared).
 - [ ] **Where uploaded certificates live.** Local disk is lost on hosts with an ephemeral filesystem; needs object storage, storing the file in MongoDB, or a persistent volume.
-- [ ] **Rate limiting**, especially on `POST /api/chat/message` and `verify-document`, before any public deployment (anyone can register and call the AI).
+- [ ] **Rate limiting**, especially on `POST /api/chat/message` and `verify-document`, before any public deployment (anyone can register and call the AI) — more pressing now that a real, quota-limited key is in play.
 - [ ] Compile TypeScript to plain JS for a production build stage (the containers still run `ts-node-dev` / the Vite dev server).
 - [ ] Revisit upgrading the backend to TypeScript 7 once `ts-node`/`ts-node-dev` support it (the backend is pinned to 5.9; the frontend already builds on 6.x).
 - [ ] Automated tests (backend integration, plus a small end-to-end suite).
@@ -506,7 +551,7 @@ Still open:
 
 ---
 
-## 17. How to keep this doc useful
+## 18. How to keep this doc useful
 
 Add a new dated entry (or update the relevant section above) whenever:
 - A new dependency is added and there's a *reason* it was chosen over an alternative.

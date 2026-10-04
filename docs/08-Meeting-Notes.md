@@ -35,7 +35,8 @@ For the reasoning behind each decision see the [Development Log](03-Development-
 | 16 Sep 2026 | **AI symptom-guidance chat** | PR #5, Dev Log §12 |
 | 16 Sep 2026 | **Admin dashboard** (verification queue, certificate viewer, AI check, approve/reject) | PR #6, Dev Log §13 |
 | 18 Sep 2026 | **Doctor dashboard** (profile, availability, holidays, activation, appointments). All three roles now have a UI | PR #7, Dev Log §14 |
-| 20 Sep 2026 | Documentation pass: README, architecture, API reference, setup guide, end-to-end walkthrough, PRD status | this change |
+| 20 Sep 2026 | Documentation pass: README, architecture, API reference, setup guide, end-to-end walkthrough, PRD status | PR #8 |
+| 4 Oct 2026 | AI provider made configurable (any OpenAI-compatible endpoint); free Google Gemini documented and verified live for both AI features, replacing the OpenAI-only path that required a paid key | Dev Log §15 |
 
 ## Decisions log (one line each)
 
@@ -53,4 +54,4 @@ For the reasoning behind each decision see the [Development Log](03-Development-
 
 ## Open items carried forward
 
-Real OpenAI key configured and the AI success paths verified · deployment · uploaded-document storage for a hosted environment · rate limiting on the AI endpoints · automated tests · doctor registration form in the UI · cancel/reschedule. Full list: [Development Log §16](03-Development-Log.md#16-open-decisions--things-to-revisit-later).
+Deployment · uploaded-document storage for a hosted environment · rate limiting on the AI endpoints (more pressing now that a real, quota-limited key is in use) · automated tests · doctor registration form in the UI · cancel/reschedule. Full list: [Development Log §17](03-Development-Log.md#17-open-decisions--things-to-revisit-later).

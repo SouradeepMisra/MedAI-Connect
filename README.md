@@ -15,7 +15,7 @@ An AI-assisted doctor appointment platform. Patients find a doctor, book a slot 
 1. **AI document verification (admin).** A vision-capable model reads the certificate a doctor uploaded and extracts their name, registration number and degree, then compares each to what the doctor typed into the registration form, returning *match / mismatch / uncertain* per field plus any concerns and a plain-language summary (structured JSON output). It is triggered on demand by the admin, it **never approves or rejects anything itself**: a human always makes the final call. Unsupported files (e.g. PDF) and API failures degrade to a clear "Failed" state instead of crashing the review flow.
 2. **Symptom-guidance chat (patient).** One ongoing conversation per patient, stored in MongoDB. The system prompt restricts the assistant to general, triage-level guidance: no diagnoses, no medication or dosage advice, explicit emergency-escalation wording for red-flag symptoms, and it steers the patient toward booking a real doctor. The UI shows a permanent disclaimer. Only the last 20 messages are sent to the model, messages are capped at 1,000 characters, and a failed AI call persists nothing.
 
-> Both features need an OpenAI API key. Without one the rest of the app works normally and the AI features return a clean error. See [Setup & Run Guide](docs/06-Setup-and-Run-Guide.md#4-openai-api-key).
+> Both features need an AI provider key. Without one the rest of the app works normally and the AI features return a clean error. OpenAI works, but so does **Google Gemini's free tier** (no credit card) - the client just talks to any OpenAI-API-compatible endpoint. See [Setup & Run Guide](docs/06-Setup-and-Run-Guide.md#4-ai-provider-key).
 
 ## Screenshots
 
@@ -46,7 +46,7 @@ An AI-assisted doctor appointment platform. Patients find a doctor, book a slot 
 flowchart LR
     Browser["React SPA<br/>(Vite, Tailwind, React Router)"] -- "REST + JWT" --> API["Express API<br/>(TypeScript)"]
     API --> DB[("MongoDB")]
-    API -- "vision + chat" --> OpenAI["OpenAI API"]
+    API -- "vision + chat" --> OpenAI["AI provider<br/>(OpenAI or OpenAI-compatible, e.g. Gemini)"]
     API --> Disk["uploads/<br/>doctor documents"]
 ```
 
@@ -55,7 +55,7 @@ flowchart LR
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, React Router |
 | Backend | Node.js 24, Express 5, TypeScript, Mongoose |
 | Database | MongoDB 7 |
-| AI | OpenAI API (vision model + text chat model) |
+| AI | OpenAI API, or any OpenAI-compatible provider (vision model + text chat model) - e.g. Google Gemini's free tier |
 | Auth | JWT (8h), bcryptjs |
 | Uploads | Multer (disk storage, 5 MB, PDF/JPG/PNG) |
 | Tooling | Docker Compose, GitHub Actions (Claude Code review) |
@@ -114,8 +114,8 @@ MedAI-Connect/
 │       ├── models/        Mongoose schemas (Patient, Doctor, Admin, DoctorAvailability, Slot, Appointment, ChatLog)
 │       ├── routes/        HTTP routes per role/feature
 │       ├── middleware/    JWT verification, role checks, file upload
-│       ├── services/      OpenAI-backed logic (document verification, symptom chat)
-│       ├── utils/         slot generation, atomic booking, credential generation, OpenAI client
+│       ├── services/      AI-backed logic (document verification, symptom chat)
+│       ├── utils/         slot generation, atomic booking, credential generation, AI provider client
 │       └── scripts/       one-off scripts (seedAdmin)
 ├── frontend/           React + Vite + Tailwind SPA
 │   └── src/
