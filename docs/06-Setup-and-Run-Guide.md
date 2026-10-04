@@ -18,7 +18,7 @@ How to get MedAI Connect running on your machine, configure it, and fix the prob
 | Git | cloning | any recent version |
 | Docker Desktop (Compose v2) | the recommended path | on Windows it needs WSL2 and CPU virtualization enabled in BIOS |
 | Node.js 24 LTS + npm | running **without** Docker only | Node 24 is what the containers use |
-| An OpenAI API key | the two AI features only | optional; see [section 4](#4-openai-api-key) |
+| An AI provider key | the two AI features only | optional, and free if you use Gemini instead of OpenAI; see [section 4](#4-ai-provider-key) |
 
 ## 2. Run with Docker (recommended)
 
@@ -33,7 +33,7 @@ cd MedAI-Connect
 cp backend/.env.example backend/.env          # PowerShell: Copy-Item backend\.env.example backend\.env
 ```
 
-Open `backend/.env` and set at least `JWT_SECRET` to a long random value (generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`). Leave `OPENAI_API_KEY` as the placeholder if you just want to look around; see [section 4](#4-openai-api-key) to enable the AI features.
+Open `backend/.env` and set at least `JWT_SECRET` to a long random value (generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`). Leave `OPENAI_API_KEY` as the placeholder if you just want to look around; see [section 4](#4-ai-provider-key) to enable the AI features (OpenAI, or Gemini for free).
 
 **Start everything:**
 
@@ -83,9 +83,10 @@ Source folders are bind-mounted into the containers, so edits to `backend/src` a
 |---|---|---|---|
 | `JWT_SECRET` | yes | none | Signs login tokens. Long and random. Keep only **one** `JWT_SECRET` line in the file. |
 | `MONGODB_URI` | yes | none | Mongo connection string. Docker Compose overrides it to `mongodb://mongodb:27017/medai-connect`; use `mongodb://localhost:27017/medai-connect` when running the backend directly. |
-| `OPENAI_API_KEY` | for AI features | none | See section 4. |
-| `OPENAI_VISION_MODEL` | no | `gpt-4o` | Model that reads doctor documents (must accept images). |
-| `OPENAI_CHAT_MODEL` | no | `gpt-4o-mini` | Model behind the symptom chat. |
+| `OPENAI_API_KEY` | for AI features | none | See section 4. Despite the name, this works with any OpenAI-API-compatible provider, not only OpenAI. |
+| `OPENAI_BASE_URL` | no | OpenAI's API | Points the client at a different OpenAI-compatible endpoint (e.g. Gemini's free tier). Unset = real OpenAI. |
+| `OPENAI_VISION_MODEL` | no | `gpt-4o` | Model that reads doctor documents (must accept images). Must be a model your chosen provider actually offers. |
+| `OPENAI_CHAT_MODEL` | no | `gpt-4o-mini` | Model behind the symptom chat. Same caveat. |
 | `MIN_BOOKING_AMOUNT` | no | `100` | Minimum amount accepted when booking. |
 | `FRONTEND_URL` | no | `http://localhost:5173` | The one origin allowed to call the API from a browser (CORS). Must match exactly, including port. |
 | `PORT` | no | `5000` | API port (Compose sets it). |
@@ -96,27 +97,44 @@ Source folders are bind-mounted into the containers, so edits to `backend/src` a
 |---|---|---|
 | `VITE_API_BASE_URL` | `http://localhost:5000` | Backend URL. Vite bakes it in at **build** time, so a deployed frontend must set it before `npm run build`. |
 
-## 4. OpenAI API key
+## 4. AI provider key
 
-The AI document verification and the symptom chat call the OpenAI API. Without a working key the rest of the app is unaffected; those two features return a clean error (the admin sees a red "Failed" message, the chat shows "Something went wrong... try again").
+The AI document verification and the symptom chat call an OpenAI-API-compatible model. Without a working key the rest of the app is unaffected; those two features return a clean error (the admin sees a red "Failed" message, the chat shows "Something went wrong... try again"). Pick one of the two options below.
+
+### Option 1: OpenAI (costs money, min $5)
+
+OpenAI no longer gives new accounts any free trial credit - you prepay before the first call.
 
 1. Sign in at https://platform.openai.com. This is the *API platform*, separate from a ChatGPT subscription; a ChatGPT Plus plan does **not** include API credit.
 2. **Billing:** add a payment method and buy prepaid credit (minimum $5). Prepaid/gift-style cards are not accepted, only standard credit or debit cards. Turn **auto-recharge off** if you want a hard spending ceiling, and set a monthly budget/usage limit.
 3. **API keys:** create a new secret key (a project-scoped key named e.g. `medai-connect` is best). Copy it immediately; it is shown once.
-4. Put it in `backend/.env`:
-   ```
-   OPENAI_API_KEY=sk-...
-   ```
-   `.env` is gitignored and was never committed. **Never paste the key into code, docs, screenshots, or a PR.**
+4. Put it in `backend/.env`: `OPENAI_API_KEY=sk-...`. Leave `OPENAI_BASE_URL` unset.
 5. Check which models your account can use and set the two model variables to real names:
    ```bash
    curl -s https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"
    ```
-   `OPENAI_VISION_MODEL` must be a model that accepts image input; `OPENAI_CHAT_MODEL` can be a small, cheap text model.
-6. Restart the backend so it re-reads the file: `docker compose restart backend`.
-7. Verify: log in as a patient, open **AI Symptom Chat** and send a message; as an admin, open a pending doctor and click **Run AI Verification**.
+   `OPENAI_VISION_MODEL` must accept image input; `OPENAI_CHAT_MODEL` can be a small, cheap text model.
 
-Cost is small for this usage (a chat reply on a small model is a fraction of a cent; one document check is one image request), but check current pricing. If you deploy publicly, anyone can register and use the chat, so cap your monthly budget and add rate limiting first (see the README roadmap).
+### Option 2: Google Gemini (free, no card)
+
+Google's Gemini API has a real no-credit-card free tier (via [Google AI Studio](https://aistudio.google.com)) that supports both vision and text, and speaks the OpenAI API format through a compatibility endpoint - so the exact same code above just points somewhere else.
+
+1. Sign in at https://aistudio.google.com/apikey and create a free API key. No billing required.
+2. In `backend/.env`, set all four:
+   ```
+   OPENAI_API_KEY=your-gemini-api-key
+   OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+   OPENAI_VISION_MODEL=gemini-2.5-flash-lite
+   OPENAI_CHAT_MODEL=gemini-2.5-flash-lite
+   ```
+3. **Use a Flash-Lite model, not plain Flash.** As of this writing, Flash models get a very small free daily quota (around 20 requests/day) while Flash-Lite models get a much larger one (around 500/day). Free-tier model names and limits change; confirm the current ones at https://ai.google.dev/gemini-api/docs/rate-limits before relying on a specific model.
+4. The compatibility endpoint must end exactly at `.../v1beta/openai/` (trailing slash included) - the SDK appends `/chat/completions` itself.
+
+### Either way
+
+`.env` is gitignored and was never committed. **Never paste a key into code, docs, screenshots, or a PR.** After editing `backend/.env`, restart the backend so it re-reads the file: `docker compose restart backend`. Then verify: log in as a patient, open **AI Symptom Chat** and send a message; as an admin, open a pending doctor and click **Run AI Verification**.
+
+If you deploy publicly, anyone can register and use these endpoints, so cap your budget/quota and add rate limiting first (see the README roadmap).
 
 ## 5. Run without Docker
 
@@ -158,6 +176,7 @@ cd frontend && npm run build          # tsc -b + vite build
 | Registering a *second* doctor fails with `E11000 duplicate key ... loginId` | An old database has a non-sparse unique index on `loginId`. Drop it and let Mongoose rebuild it: `docker compose exec mongodb mongosh medai-connect --eval 'db.doctors.dropIndex("loginId_1")'`, then `docker compose restart backend`. A fresh database is not affected. |
 | AI check says `401 Incorrect API key provided` / chat says "Something went wrong" | `OPENAI_API_KEY` is still the placeholder or is wrong. See section 4, then restart the backend. |
 | AI check says `Unsupported file type` | Only JPG/PNG are read by the AI check. PDFs upload fine but must be reviewed manually. |
+| Using Gemini: the symptom chat works but the AI document check fails or returns nonsense | Image input through Gemini's OpenAI-compatibility endpoint has been reported as unreliable for some users/models (unconfirmed in this project - not yet tested against a real Gemini key). Try a different/newer `OPENAI_VISION_MODEL`; if it still doesn't work, the feature still fails cleanly - fall back to OpenAI for this one feature, or review documents manually. |
 | Doctor page: "Failed to load document" | The file is missing from `backend/uploads/doctor-documents/` (e.g. you cleared it). Re-register the doctor. |
 | Port already in use (`5173`, `5000`, `27017`) | Another process holds it. Stop it, or change the left side of the port mapping in `docker-compose.yml`. |
 | Warning: `the attribute 'version' is obsolete` | Harmless. Newer Compose ignores the field. |

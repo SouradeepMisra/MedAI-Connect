@@ -24,7 +24,7 @@ flowchart LR
     SPA -- "REST + Bearer JWT" --> API
     API -- Mongoose --> DB
     API -- "Multer / fs" --> FS
-    API -- "chat + vision" --> OAI["OpenAI API"]
+    API -- "chat + vision" --> OAI["AI provider<br/>(OpenAI-compatible)"]
 ```
 
 Three services run under Docker Compose (`mongodb`, `backend`, `frontend`), all with bind-mounted source for hot reload. The browser talks directly to the API (CORS restricted to `FRONTEND_URL`); there is no reverse proxy or server-side rendering.
@@ -38,7 +38,7 @@ Express 5 + TypeScript, organised by responsibility:
 | `routes/` | HTTP handlers, one file per role/feature: `patientRoutes`, `doctorRoutes` (public registration and discovery), `authRoutes`, `adminRoutes`, `doctorAvailabilityRoutes` (doctor self-service, mounted at `/api/doctor`), `appointmentRoutes`, `chatRoutes` |
 | `models/` | Mongoose schemas (section 4) |
 | `middleware/` | `verifyToken` (JWT → `req.user`), `requireRole(role)`, Multer upload config |
-| `services/` | Logic that talks to OpenAI: `aiVerificationService`, `symptomChatService` |
+| `services/` | Logic that talks to the AI provider: `aiVerificationService`, `symptomChatService` |
 | `utils/` | `slotGenerator` (times from a schedule), `slotBooking` (atomic claim/release), `credentialGenerator` (secure IDs/passwords), `openaiClient` (lazy singleton) |
 | `scripts/` | `seedAdmin.ts` |
 
@@ -72,7 +72,7 @@ sequenceDiagram
 The check and the increment are one atomic database operation, so there is no window between "is there room?" and "take a seat". This was verified by firing two simultaneous requests at one open seat: exactly one `201`, one `409`. Slot capacity is copied onto the slot when it is created, so later edits to a doctor's template don't retroactively change existing slots.
 
 ### AI features
-Both use one lazily-created OpenAI client (created on first use, not at import, so a missing key can't crash server start-up).
+Both use one lazily-created client (created on first use, not at import, so a missing key can't crash server start-up). It talks to the real OpenAI API by default; an optional `OPENAI_BASE_URL` points it at any other OpenAI-compatible endpoint instead (e.g. Google Gemini's free tier) with no code change in either service - they only deal in configurable model names.
 
 - **Document verification** (`aiVerificationService`): reads the stored JPG/PNG, sends it as a base64 image plus the doctor's submitted name/registration number/degree, and requests **structured JSON output** (a strict schema) so the result is always parseable. Any failure is returned as a `Failed` result rather than thrown. It is triggered on demand by an admin and only records advice on the doctor; approval stays manual.
 - **Symptom chat** (`symptomChatService`): a fixed safety-oriented system prompt + the last 20 messages + the new one. The route saves both turns only after the model answers.

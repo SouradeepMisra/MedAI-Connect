@@ -434,7 +434,7 @@ actually happened. Lesson: assert on specific roles/URLs, and look at the screen
 - **A failed AI call persists nothing**, so history never contains a one-sided turn the patient
   never got an answer to. The UI shows an inline retry message.
 - *Status:* verified end to end with a placeholder key (the failure path). The success path needs a
-  real key; see [Setup & Run Guide](06-Setup-and-Run-Guide.md#4-openai-api-key).
+  real key; see [Setup & Run Guide](06-Setup-and-Run-Guide.md#4-ai-provider-key).
 
 ---
 
