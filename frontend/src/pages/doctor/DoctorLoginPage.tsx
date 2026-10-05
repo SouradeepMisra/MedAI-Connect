@@ -38,7 +38,7 @@ export function DoctorLoginPage() {
             value={loginId}
             onChange={(e) => setLoginId(e.target.value)}
             placeholder="DOC-XXXXXX"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -48,23 +48,23 @@ export function DoctorLoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="w-full rounded-md bg-teal-600 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
         >
           {submitting ? 'Logging in...' : 'Log in'}
         </button>
       </form>
       <p className="mt-4 text-center text-sm text-slate-500">
         Not registered yet?{' '}
-        <Link to="/doctor/register" className="text-slate-900 underline">
+        <Link to="/doctor/register" className="text-teal-600 underline hover:text-teal-700">
           Register
         </Link>
       </p>

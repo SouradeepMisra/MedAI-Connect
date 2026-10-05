@@ -1,5 +1,9 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+
+function navLinkClass({ isActive }: { isActive: boolean }) {
+  return isActive ? 'font-medium text-teal-600' : 'text-slate-600 hover:text-teal-600';
+}
 
 export function Navbar() {
   const { patient, logout } = useAuth();
@@ -16,34 +20,34 @@ export function Navbar() {
         MedAI Connect
       </Link>
       <div className="flex items-center gap-6 text-sm">
-        <Link to="/" className="text-slate-600 hover:text-slate-900">
+        <NavLink to="/" end className={navLinkClass}>
           Find Doctors
-        </Link>
+        </NavLink>
         {patient ? (
           <>
-            <Link to="/my-appointments" className="text-slate-600 hover:text-slate-900">
+            <NavLink to="/my-appointments" className={navLinkClass}>
               My Appointments
-            </Link>
-            <Link to="/chat" className="text-slate-600 hover:text-slate-900">
+            </NavLink>
+            <NavLink to="/chat" className={navLinkClass}>
               AI Symptom Chat
-            </Link>
+            </NavLink>
             <span className="text-slate-500">Hi, {patient.name}</span>
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700"
+              className="rounded-md bg-teal-600 px-3 py-1.5 text-white hover:bg-teal-700"
             >
               Logout
             </button>
           </>
         ) : (
           <>
-            <Link to="/login" className="text-slate-600 hover:text-slate-900">
+            <NavLink to="/login" className={navLinkClass}>
               Login
-            </Link>
+            </NavLink>
             <Link
               to="/register"
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700"
+              className="rounded-md bg-teal-600 px-3 py-1.5 text-white hover:bg-teal-700"
             >
               Register
             </Link>

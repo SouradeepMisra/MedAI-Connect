@@ -5,6 +5,7 @@ import { DoctorAuthProvider } from './context/DoctorAuthContext';
 import { Navbar } from './components/Navbar';
 import { AdminNavbar } from './components/AdminNavbar';
 import { DoctorNavbar } from './components/DoctorNavbar';
+import { Footer } from './components/Footer';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminProtectedRoute } from './components/AdminProtectedRoute';
 import { DoctorProtectedRoute } from './components/DoctorProtectedRoute';
@@ -27,27 +28,36 @@ import { DoctorAppointmentsPage } from './pages/doctor/DoctorAppointmentsPage';
 
 function PatientLayout() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50">
       <Navbar />
-      <Outlet />
+      <div className="flex-1">
+        <Outlet />
+      </div>
+      <Footer />
     </div>
   );
 }
 
 function AdminLayout() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50">
       <AdminNavbar />
-      <Outlet />
+      <div className="flex-1">
+        <Outlet />
+      </div>
+      <Footer />
     </div>
   );
 }
 
 function DoctorLayout() {
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50">
       <DoctorNavbar />
-      <Outlet />
+      <div className="flex-1">
+        <Outlet />
+      </div>
+      <Footer />
     </div>
   );
 }

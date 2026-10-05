@@ -44,22 +44,32 @@ export function DoctorListPage() {
           placeholder="Search by doctor name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none sm:w-2/3"
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 sm:w-2/3"
         />
         <input
           type="text"
           placeholder="Filter by specialization..."
           value={specialization}
           onChange={(e) => setSpecialization(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none sm:w-1/3"
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 sm:w-1/3"
         />
       </div>
 
-      {loading && <p className="mt-8 text-sm text-slate-500">Loading doctors...</p>}
-      {error && <p className="mt-8 text-sm text-red-600">{error}</p>}
+      {loading && (
+        <div className="mt-8 rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+          Loading doctors...
+        </div>
+      )}
+      {error && (
+        <div className="mt-8 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {!loading && !error && doctors.length === 0 && (
-        <p className="mt-8 text-sm text-slate-500">No doctors found.</p>
+        <div className="mt-8 rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+          No doctors found.
+        </div>
       )}
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

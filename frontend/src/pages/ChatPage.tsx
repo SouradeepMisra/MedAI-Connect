@@ -76,7 +76,7 @@ export function ChatPage() {
             <div
               className={`max-w-[75%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                 message.role === 'user'
-                  ? 'bg-slate-900 text-white'
+                  ? 'bg-teal-600 text-white'
                   : 'border border-slate-200 bg-slate-50 text-slate-800'
               }`}
             >
@@ -96,7 +96,7 @@ export function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
         <input
@@ -105,12 +105,12 @@ export function ChatPage() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Describe your symptoms..."
           maxLength={1000}
-          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
         />
         <button
           type="submit"
           disabled={sending || !input.trim()}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
         >
           Send
         </button>

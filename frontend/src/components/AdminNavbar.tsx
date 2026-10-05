@@ -21,7 +21,7 @@ export function AdminNavbar() {
           <button
             type="button"
             onClick={handleLogout}
-            className="rounded-md bg-white px-3 py-1.5 text-slate-900 hover:bg-slate-200"
+            className="rounded-md bg-teal-500 px-3 py-1.5 text-white hover:bg-teal-400"
           >
             Logout
           </button>
