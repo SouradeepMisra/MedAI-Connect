@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { doctorLogin } from '../../api/doctor';
 import { useDoctorAuth } from '../../context/DoctorAuthContext';
 
@@ -62,6 +62,12 @@ export function DoctorLoginPage() {
           {submitting ? 'Logging in...' : 'Log in'}
         </button>
       </form>
+      <p className="mt-4 text-center text-sm text-slate-500">
+        Not registered yet?{' '}
+        <Link to="/doctor/register" className="text-slate-900 underline">
+          Register
+        </Link>
+      </p>
     </div>
   );
 }

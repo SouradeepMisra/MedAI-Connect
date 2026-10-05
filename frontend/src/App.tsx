@@ -18,6 +18,7 @@ import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminPendingDoctorsPage } from './pages/admin/AdminPendingDoctorsPage';
 import { AdminDoctorDetailPage } from './pages/admin/AdminDoctorDetailPage';
 import { DoctorLoginPage } from './pages/doctor/DoctorLoginPage';
+import { DoctorRegisterPage } from './pages/doctor/DoctorRegisterPage';
 import { DoctorDashboardPage } from './pages/doctor/DoctorDashboardPage';
 import { DoctorAvailabilityPage } from './pages/doctor/DoctorAvailabilityPage';
 import { DoctorAppointmentsPage } from './pages/doctor/DoctorAppointmentsPage';
@@ -77,6 +78,7 @@ function App() {
 
               <Route element={<DoctorLayout />}>
                 <Route path="/doctor/login" element={<DoctorLoginPage />} />
+                <Route path="/doctor/register" element={<DoctorRegisterPage />} />
                 <Route element={<DoctorProtectedRoute />}>
                   <Route path="/doctor" element={<DoctorDashboardPage />} />
                   <Route path="/doctor/availability" element={<DoctorAvailabilityPage />} />
