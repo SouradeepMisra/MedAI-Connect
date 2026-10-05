@@ -15,3 +15,10 @@ export function bookAppointment(
 export function getMyAppointments(token: string) {
   return apiRequest<{ appointments: Appointment[] }>('/api/appointments/my', { token });
 }
+
+export function cancelAppointment(token: string, appointmentId: string) {
+  return apiRequest<{ message: string; appointment: Appointment }>(
+    `/api/appointments/${appointmentId}/cancel`,
+    { method: 'PATCH', token }
+  );
+}
