@@ -1,9 +1,9 @@
 Document Name : End-to-End Walkthrough
-Version       : 1.0
+Version       : 1.1
 Author        : Souradeep Misra
 Status        : Living document
 Created Date  : 20 September 2026
-Last Updated  : 20 September 2026
+Last Updated  : 5 October 2026
 
 # End-to-End Walkthrough
 
@@ -19,7 +19,7 @@ sequenceDiagram
     actor P as Patient
     participant S as MedAI Connect
 
-    D->>S: Register + upload certificate (API)
+    D->>S: Register + upload certificate (UI form)
     Note over S: Doctor status = Pending
     A->>S: Open pending queue, view certificate
     A->>S: (optional) Run AI verification
@@ -28,14 +28,17 @@ sequenceDiagram
     S-->>A: Doctor's Login ID
     D->>S: Log in (Login ID + own password)
     D->>S: Set weekly availability, block holidays
+    D->>S: Add a profile photo and bio
     D->>S: Activate profile
     Note over S: Doctor is now visible and bookable
     P->>S: Register, log in
     P->>S: Search doctor, pick date and slot
     P->>S: Book (atomic seat claim)
-    S-->>P: Appointment booked
+    S-->>P: Appointment booked + confirmation email
     D->>S: See the booking under Appointments
     P->>S: Chat with the AI symptom assistant
+    P->>S: Cancel the booking (>=48h ahead)
+    S-->>P: Appointment cancelled, seat released
 ```
 
 A doctor appears on the patient site only when they are **Approved by an admin *and* Activated by themselves**. Before either step, they are invisible and unbookable.
@@ -44,22 +47,9 @@ A doctor appears on the patient site only when they are **Approved by an admin *
 
 ## Part 1: Using the web UI
 
-### Step 1: Doctor registers *(API only for now)*
+### Step 1: Doctor registers
 
-There is no doctor registration form in the UI yet, so this one step uses the API (any JPG or PNG works as the "certificate"):
-
-```bash
-curl -X POST http://localhost:5000/api/doctors/register \
-  -F "name=Sarah Chen" \
-  -F "registrationNumber=MC-2024-001" \
-  -F "degree=MBBS, MD" \
-  -F "specialization=Cardiology" \
-  -F "experience=9" \
-  -F "password=DoctorPass123" \
-  -F "document=@./certificate.jpg;type=image/jpeg"
-```
-
-Expect `201` and `"verificationStatus":"Pending"`. The doctor chose their own password here; approval does not replace it.
+Open http://localhost:5173/doctor/register and fill in name, registration number, degree, specialization, years of experience, a password, and upload any JPG/PNG/PDF as the "certificate". Submit — the account is created with `verificationStatus: "Pending"` and you're told to wait for admin approval. The doctor chose their own password here; approval does not replace it.
 
 ### Step 2: Admin reviews and approves
 
@@ -76,20 +66,29 @@ Expect `201` and `"verificationStatus":"Pending"`. The doctor chose their own pa
 2. The dashboard shows the profile and **Activation Status**. The **Activate** button is disabled and asks for availability first.
 3. Go to **Availability**. Tick the days the doctor works, set start/end times, choose **Slot duration** (minutes) and **Max patients per slot**, and click **Save Availability**.
 4. Optionally pick a date under **Blocked Dates** and click **Block this date**. No slots will be offered that day.
-5. Back on the **Dashboard**, click **Activate**. The badge turns green: *Activated, patients can book appointments with you*.
+5. Optionally go to **Edit Profile** and upload a photo plus a short bio — this is what patients see on the doctor list and profile page instead of a bare initials circle.
+6. Back on the **Dashboard**, click **Activate**. The badge turns green: *Activated, patients can book appointments with you*.
 
 ### Step 4: Patient finds and books
 
 1. Open http://localhost:5173/register, create an account (name, email, phone, password, re-enter password), then log in at `/login`.
 2. On **Find a Doctor**, the new doctor now appears. Try the name search and the specialization filter.
 3. Open the doctor. Pick a date (today through 30 days ahead). Slots that already passed today, blocked dates and non-working days show no slots; full slots are greyed out.
-4. Click a slot, keep or change the **Booking Amount** (must be at least `MIN_BOOKING_AMOUNT`, default 100), and click **Confirm Booking**. You'll see *Appointment booked!*
+4. Click a slot, keep or change the **Booking Amount** (must be at least `MIN_BOOKING_AMOUNT`, default 100), and click **Confirm Booking**. You'll see *Appointment booked!* — and, if `BREVO_API_KEY` is configured (see [Setup & Run Guide §4a](06-Setup-and-Run-Guide.md#4a-email-brevo)), a confirmation email.
 5. **My Appointments** lists it with doctor, date, time, amount and a *Booked* badge.
 
 ### Step 5: Both sides see the booking
 
 - As the doctor, open **Appointments**: the patient's name, date/time and contact number are there.
 - As the patient, open **AI Symptom Chat**, describe a symptom, and read the reply. Try something alarming like "chest pain and trouble breathing": the assistant is instructed to tell you to seek emergency care immediately. Reload the page and the conversation is still there.
+
+### Step 6: Patient cancels the booking
+
+Back on **My Appointments**, a booking more than 48 hours out shows a **Cancel appointment** button. Click it, confirm the prompt, and the badge flips to *Cancelled* — the slot is freed up for other patients to book. A booking within 48 hours (or already in the past) shows no Cancel button; the API rejects it the same way if attempted directly.
+
+### Step 7 (if you ever need it): forgot password
+
+From **Log in**, click **Forgot password?**, enter the patient's email, and submit — the response is the same generic "if an account exists..." message either way, so it never reveals whether that email is registered. If `BREVO_API_KEY` is configured, a real reset link arrives by email; it's valid for 1 hour and can only be used once.
 
 ### Things worth trying (edge cases the system handles)
 
@@ -98,9 +97,13 @@ Expect `201` and `"verificationStatus":"Pending"`. The doctor chose their own pa
 | Book with an amount below the minimum, or non-numeric | `A minimum booking amount of 100 is required`, and no seat is consumed |
 | Book a slot that's full (set *Max patients per slot* to 1 and book it twice) | `This slot is fully booked` |
 | Two browsers click the last seat at the same instant | exactly one succeeds, the other gets the "fully booked" message |
+| Two browsers cancel the same booking at the same instant | exactly one succeeds, the other gets a `409` |
+| Try to cancel a booking less than 48 hours away | `400 Appointments can only be cancelled at least 48 hours in advance`, and the UI doesn't even show the Cancel button for it |
 | Open `/admin` while logged out | redirected to `/admin/login` |
+| Open `/admin` with a stale/expired token still in localStorage | automatically cleared and redirected to `/admin/login`, instead of a stuck error page |
 | Use a patient token on a doctor/admin API | `403 You do not have permission` |
 | Send a chat message with an invalid OpenAI key | clean inline error; nothing is saved to the history |
+| Request a password reset for an email that isn't registered | same generic "if an account exists..." message as a real one |
 
 ---
 
@@ -123,8 +126,18 @@ curl -s -X POST http://localhost:5000/api/auth/admin/login \
 # -> copy "token"  = <ADMIN_TOKEN>
 ```
 
-**2. Register the doctor** (see Part 1, step 1), then **list the pending queue**
+**2. Register the doctor**, then **list the pending queue**
 ```bash
+curl -X POST http://localhost:5000/api/doctors/register \
+  -F "name=Sarah Chen" \
+  -F "registrationNumber=MC-2024-001" \
+  -F "degree=MBBS, MD" \
+  -F "specialization=Cardiology" \
+  -F "experience=9" \
+  -F "password=DoctorPass123" \
+  -F "document=@./certificate.jpg;type=image/jpeg"
+# -> expect 201 and "verificationStatus":"Pending"
+
 curl -s http://localhost:5000/api/admin/doctors/pending -H "Authorization: Bearer <ADMIN_TOKEN>"
 # -> copy the doctor's "_id" = <DOCTOR_ID>
 ```
@@ -181,6 +194,7 @@ curl -s -X POST http://localhost:5000/api/appointments/book \
 
 curl -s http://localhost:5000/api/appointments/my   -H "Authorization: Bearer <PATIENT_TOKEN>"
 curl -s http://localhost:5000/api/doctor/appointments -H "Authorization: Bearer <DOCTOR_TOKEN>"
+# -> copy the appointment's "_id" = <APPOINTMENT_ID>
 ```
 
 **7. Talk to the AI assistant** *(needs an OpenAI key)*
@@ -191,10 +205,27 @@ curl -s -X POST http://localhost:5000/api/chat/message \
 curl -s http://localhost:5000/api/chat/history -H "Authorization: Bearer <PATIENT_TOKEN>"
 ```
 
+**8. Cancel the booking** (only works 48h+ before the slot — `$DATE` above is tomorrow, so this will likely 400; book further out to actually see it succeed)
+```bash
+curl -s -X PATCH http://localhost:5000/api/appointments/<APPOINTMENT_ID>/cancel \
+  -H "Authorization: Bearer <PATIENT_TOKEN>"
+```
+
+**9. Forgot/reset password** *(needs `BREVO_API_KEY` configured)*
+```bash
+curl -s -X POST http://localhost:5000/api/auth/patient/forgot-password \
+  -H "Content-Type: application/json" -d '{"email":"patient@example.com"}'
+# -> check the inbox for the reset link, copy its "?token=" value = <RESET_TOKEN>
+
+curl -s -X POST http://localhost:5000/api/auth/patient/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<RESET_TOKEN>","password":"NewPatientPass123"}'
+```
+
 ## Clean up after a demo
 
 ```bash
 docker compose exec mongodb mongosh medai-connect --eval 'db.doctors.deleteMany({}); db.patients.deleteMany({}); db.appointments.deleteMany({}); db.slots.deleteMany({}); db.doctoravailabilities.deleteMany({}); db.chatlogs.deleteMany({})'
 ```
 
-This keeps the admin. Uploaded certificates stay in `backend/uploads/doctor-documents/`; delete those files by hand if you want them gone.
+This keeps the admin. Uploaded certificates and photos stay in `backend/uploads/doctor-documents/` and `backend/uploads/doctor-photos/`; delete those files by hand if you want them gone.

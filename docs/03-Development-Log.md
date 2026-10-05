@@ -1,9 +1,9 @@
 Document Name : Development Log
-Version       : 2.0
+Version       : 2.1
 Author        : Souradeep Misra
 Status        : Living document (update as the project progresses)
 Created Date  : 18 July 2026
-Last Updated  : 20 September 2026
+Last Updated  : 5 October 2026
 
 # Development Log — MedAI Connect
 
@@ -514,7 +514,112 @@ used whichever line came last, but exactly the footgun the Setup Guide already w
 
 ---
 
-## 16. How things were verified, and the limits of that
+## 16. Doctor registration UI, and two review findings (PR #10, merged 5 Oct 2026)
+
+**What:** a doctor registration form in the UI (`/doctor/register`) — self-registration had been API-only since section 7.1.
+
+The automated PR review caught two real issues on this PR, both fixed before merge:
+- **Path traversal via the uploaded document's filename.** The multer `destination`/`filename` config used the client-supplied `file.originalname` directly in the stored path (e.g. a crafted `../../../etc/x.pdf` would write outside the uploads folder). Fixed by deriving the extension from the already-validated mimetype and generating the actual filename with `crypto.randomBytes`, so `originalname` never touches the constructed path at all.
+- **An unhandled upload error leaked a raw stack trace.** A rejected file (wrong type, over the size limit) threw inside Multer before any route handler ran, which Express's default error handling returned as an HTML stack trace to the client. Fixed with an Express error-handling middleware that recognizes `multer.MulterError` and returns a clean `{ error }` JSON message instead.
+
+---
+
+## 17. Security sweep (PR #11, merged 5 Oct 2026)
+
+Six findings from a full-codebase review, deliberately split into two PRs: five genuine bugs here, and the sixth (three duplicated auth contexts — a pure refactor, no bug) as its own PR (section 18) so this one stayed focused and easy to review.
+
+- **JWT secret silently defaulted to `''` if unset — critical.** `jwt.verify`/`jwt.sign` used `process.env.JWT_SECRET || ''` everywhere. A missing env var meant every token was signed and verified against the literal empty string — anyone could forge a valid token for any role. **Fix:** fail fast, not silently. A new `getJwtSecret()` throws if unset; `index.ts` calls it once right after `dotenv.config()` and `process.exit(1)`s if it throws, the same philosophy already used for the MongoDB connection check. No `|| ''` fallback exists anywhere afterward — the server cannot start without a real secret.
+- **Admin approve/reject — non-atomic find-then-save race.** Two concurrent approve requests for the same pending doctor could both pass the status check before either saved. **Fix:** the same atomic-conditional-update pattern the booking code already used — `findOneAndUpdate({ _id, verificationStatus: 'Pending' }, update, { new: true })`. A race now gets a clean `409` instead of a corrupted result.
+- **ChatLog find-or-create race.** Two near-simultaneous first messages from one patient could both find no existing `ChatLog`, both call the AI (real cost incurred), then race on `.save()` — the loser hit the unique index on `patient` and 500'd, silently dropping that reply. **Fix:** materialize the document first (`ensureChatLog`, the same `findOneAndUpdate` + `$setOnInsert` + upsert + catch-E11000-and-refetch pattern `ensureSlot` already used for bookings), before calling the AI. The final write becomes an atomic `$push`, not a read-mutate-save race.
+- **DoctorAvailability first-save race.** The existing upsert didn't handle the classic concurrent-upsert duplicate-key race on a doctor's very first save. **Fix:** catch-and-retry, but the retry is a plain update (not a re-fetch like ChatLog) — this request's submitted schedule values matter, so silently discarding them in favor of whichever insert won first would be wrong.
+- **Doctor search/specialization — regex injection.** Both query params went straight into `$regex` unescaped; an invalid fragment (e.g. `search=(`) threw at query-execution time, an unhandled 500 from a public endpoint. **Fix:** a small `escapeRegex()` helper applied to both before they're interpolated.
+
+All five verified live against the real Docker stack, not just type-checked: the JWT fail-fast behavior, each race fired as two genuinely concurrent requests (one `200`/one `409` or equivalent), and the regex edge cases.
+
+---
+
+## 18. Auth-context consolidation (PR #12, merged 5 Oct 2026)
+
+The sixth finding from the same review, split out on purpose (see section 17's intro). `AuthContext`, `AdminAuthContext` and `DoctorAuthContext` were three ~60-line copies of the same create-context/localStorage-sync/login/logout implementation — exactly the duplication flagged as a code smell back in section 14, revisited now that fixing it was actually in scope.
+
+**Fix:** extracted one `createAuthContext<TUser>(storageKey)` factory; each of the three files shrank to a thin adapter that calls it and renames the generic `user` field to its domain-specific name (`patient`/`admin`/`doctor`), passing through its original exact error message so `useAuth()`/`useAdminAuth()`/`useDoctorAuth()` throw byte-identical errors to before if called outside their provider. Net effect: ~140 fewer lines, zero change to any hook name, returned field, or component name — none of the 17 existing consumption sites needed editing. Verified with Playwright: all three roles' sessions still persist across a refresh, stay isolated from each other in the same browser, and logout still only clears that one role's key.
+
+---
+
+## 19. Forgot password via email (PR #13, merged 5 Oct 2026)
+
+**What:** patient-only forgot/reset-password flow, email delivery via Brevo's transactional API (free tier, no card).
+
+**Why Brevo:** same free-tier-first approach as the Gemini decision in section 15. The user initially hit friction signing up (Brevo's form asks for a company name) — resolved by just entering any text there; it isn't validated against a real company.
+
+**Design, mirroring patterns already established in this codebase:**
+- **Token handling mirrors bcrypt.** A random token (`crypto.randomBytes(32)`) is emailed, but only its sha256 hash plus a 1-hour expiry are persisted — never the raw token, the same never-store-the-secret philosophy as the password hash itself. Single-use: cleared on a successful reset.
+- **No user enumeration.** `forgot-password` always returns the same generic message whether or not the email matches an account. If it matches, the email send failure *is* a real error (returned as a `500`, cause logged server-side only) — unlike the booking receipt added later (section 23), this email **is** the entire point of the request, so its failure can't be silently swallowed.
+- **Scoped to patient only**, a deliberate decision: doctors/admins are admin-provisioned and a much smaller population, not worth the added surface right now.
+
+Verified live with a real Brevo account end-to-end: request → email received → link followed → new password set → login succeeds with the new password, fails with the old one. Also verified the no-enumeration behavior and wrong/reused/expired token rejection.
+
+**Incident during verification:** a scratch `mongosh` command written to inspect a dummy field accidentally included an unintended `updateOne` that overwrote the real admin account's password hash. Caught immediately, fixed by resetting it to a known value and telling the user. Lesson: a one-off diagnostic DB command deserves the same "what does this actually do" scrutiny as a code change, especially when it's a write, not a read.
+
+---
+
+## 20. UI polish (PR #14, merged 5 Oct 2026)
+
+**What:** the entire app was pure black/white/slate — Tailwind v4 with zero customization (`index.css` was the bare `@import`). Added one consistent teal accent (buttons, links, focus rings, active nav state via `NavLink`), a shared footer, initials avatars on doctor cards, and styled empty/error states (a bordered alert box instead of bare red text) — applied as a mechanical, repeated class-level change across every page, described once and applied everywhere rather than bespoke per page.
+
+**Decision:** no new theme-token abstraction (no Tailwind `@theme` block) — literal `teal-600`/`teal-700` classes directly, since this is a one-shot consistent recolor, not an evolving design system, and nothing in the codebase already has a token layer to extend. The admin area kept its existing dark header as a deliberate visual distinction, just with a teal logout button tying it back to the rest of the brand.
+
+Verified via Playwright screenshots at desktop and mobile widths across public pages, an authenticated patient session, and the admin dashboard, plus a functional smoke test (login, doctor search) confirming the class-only changes didn't touch behavior. `eslint`'s 5 pre-existing errors (unrelated to this change — an auth-context fast-refresh pattern and two pre-existing `setState`-in-effect warnings) were confirmed unchanged from `main` before merging.
+
+---
+
+## 21. Cancel appointment, 48-hour rule (PR #15, merged 5 Oct 2026)
+
+**What:** `PATCH /api/appointments/:id/cancel` (patient-only) — the first of the PRD's three explicitly-requested features still missing (cancel/reschedule, doctor photo+bio, booking receipt — reschedule itself stays out of scope here, deliberately, as a separate future PRD item).
+
+The schema was already ready for this: `Appointment.status` has included `'Cancelled'` in its enum since section 7, unused until now. The compensating action this needs also already existed: `releaseSlot(slotId)`, previously only used to undo a claim when `Appointment.create` failed after a successful `claimSlot` — cancellation is the same "give the seat back" operation.
+
+**Design:** load the appointment, 404 if missing or not owned by the caller; 409 if not currently `Booked`; a 48-hour check combining the stored date with its `HH:mm` time (same UTC approach the booking routes already use), which also naturally rejects an appointment already in the past with no separate check; then the same atomic-conditional-update pattern as admin approve/reject (section 17) so a concurrent double-cancel can't both succeed; then `releaseSlot`.
+
+Verified live: full round trip (status flips, slot frees up and becomes bookable again), the 48-hour rejection (via a direct DB-write-adjusted appointment), a concurrent double-cancel (one `200`/one `409`, no double-release), cancelling another patient's appointment (`404`), and the UI end-to-end. **Caught a real bug during that UI verification:** the cancel response's appointment isn't populated with doctor info the way `GET /my`'s is, so replacing the whole object in local state briefly showed "Dr. Unknown" on the just-cancelled row — fixed by merging in just the `status` field instead of the whole response object.
+
+---
+
+## 22. Doctor photo + bio (PR #16, merged 5 Oct 2026)
+
+**What:** the second of the three requested features. Doctor cards and profiles showed only credentials — nothing to help a patient choose between doctors.
+
+**Scoped as self-service, post-approval:** the doctor sets their own photo + bio from their dashboard once already approved and active, the same way they already manage availability — not bolted onto the public, unauthenticated registration form (which already handles one security-sensitive upload, the subject of section 16's path-traversal fix; keeping that to a single file upload keeps that surface small).
+
+A second Multer config (`uploadPhoto`) mirrors the existing document-upload one exactly (same crypto-random filename generation) but images only, its own directory, a 2MB limit. Public endpoints compute a `photoUrl` from the stored filename rather than ever exposing the raw filename. Photos are served via plain `express.static`, deliberately different from documents, which stay admin-gated and streamed through an authenticated route — photos are meant to be public, documents are not.
+
+Verified live end to end (register → approve → activate → set photo + bio → confirmed on self profile, public list, and public detail), including photo replacement deleting the old file and invalid file type/oversize uploads rejected cleanly. **Caught a real bug during verification:** the shared Multer error handler in `index.ts` hardcoded "File must be 5MB or smaller" for every upload — correct for documents, wrong once the 2MB photo limit existed. Fixed to look up the right limit by field name (`document` vs `photo`) rather than a single hardcoded number.
+
+---
+
+## 23. Booking confirmation email receipt (PR #17, merged 5 Oct 2026)
+
+**What:** the third requested feature. A patient who booked got nothing but the in-app response — no record in their inbox.
+
+Reused the email infrastructure from section 19 rather than duplicating it: extracted a shared `sendEmail()` helper out of what had been `sendPasswordResetEmail`'s inline Brevo call, so the new `sendBookingReceiptEmail` template didn't need to repeat the fetch/header/error-handling boilerplate.
+
+**Deliberately non-blocking, unlike the reset email in section 19:** by the time this send would fire, the booking has already fully succeeded (slot claimed, `Appointment` created) — the email is a courtesy copy, not a precondition, so it runs in its own try/catch that only logs on failure. Scope stayed to booking only; cancellation (section 21) doesn't get an email in this change, matching exactly what was asked for rather than building a general notification system.
+
+Verified live: the password-reset flow still worked unchanged after the shared-helper refactor, a real receipt email arrived with correct doctor/date/time/amount for an actual booking, and — breaking the Brevo API key on purpose — booking still succeeded with the correct `201` when the send failed, the real cause logged server-side only.
+
+---
+
+## 24. Session-expiry auto-recovery (PR #18, merged 5 Oct 2026)
+
+**What a user actually hit:** after a long session, an admin page showed "Invalid or expired token" with no way back except guessing the login URL or manually clearing `localStorage`. Root cause: `ProtectedRoute`/`AdminProtectedRoute`/`DoctorProtectedRoute` only check that a token is *present*, never that it's still valid, so a stale token let the user through to a page whose API calls then failed with a 401 that just rendered as a raw inline error.
+
+**Fix:** a shared `handleUnauthorized(path)` in `api/client.ts`. On any 401, it maps the request path to the role it belongs to — via the same route prefixes the backend already uses to gate each role's routes (`/api/admin`, `/api/doctor/`, `/api/appointments`, `/api/chat`), so no new role-tagging scheme was needed — clears that role's stored session, and sends the browser to that role's login page. `apiRequest` calls it on every 401 automatically; the two authenticated calls that bypass `apiRequest` for non-JSON bodies (the admin document blob fetch, the doctor profile photo upload) call it the same way.
+
+Verified live by injecting a stale/invalid token into `localStorage` for each of the three roles and visiting a protected page: each now redirects to that role's login and clears the stale entry. Confirmed no false positives — a normal valid login still works and keeps its session, and a wrong-password attempt still just shows its usual inline error.
+
+---
+
+## 25. How things were verified, and the limits of that
 
 - API behaviour: `curl` against the running stack, including negative cases (bad role, bad input,
   the concurrent-booking race).
@@ -530,28 +635,33 @@ used whichever line came last, but exactly the footgun the Setup Guide already w
 
 ---
 
-## 17. Open decisions / things to revisit later
+## 26. Open decisions / things to revisit later
 
 Resolved since the last update:
 - [x] **Payment handling** for the minimum booking amount: *decided, mocked.* The amount is validated only; no gateway in v1 (section 9).
 - [x] **LLM provider for the deployed demo:** *decided, OpenAI-compatible API, with Google Gemini's free tier as the default recommendation* (section 15) rather than requiring OpenAI's now-paid-only access. A local model isn't publicly reachable.
 - [x] **Real AI key configured and both success paths verified live** (section 15) — previously only the failure path had ever been tested.
+- [x] **Doctor self-registration form in the UI** (section 16).
+- [x] **Extract a shared generic auth context now that three exist** (section 18).
+- [x] **Cancel appointment with the 48-hour rule** (section 21). Reschedule is still open — see below.
+- [x] **Email infrastructure** (Brevo) stood up for forgot-password (section 19) and reused for the booking receipt (section 23).
+- [x] **Session recovery on an expired token** (section 24).
 
 Still open:
 - [ ] **Deployment target and MongoDB hosting** (a hosted Atlas free cluster is the likely answer for the database; the app hosts are being compared).
-- [ ] **Where uploaded certificates live.** Local disk is lost on hosts with an ephemeral filesystem; needs object storage, storing the file in MongoDB, or a persistent volume.
-- [ ] **Rate limiting**, especially on `POST /api/chat/message` and `verify-document`, before any public deployment (anyone can register and call the AI) — more pressing now that a real, quota-limited key is in play.
+- [ ] **Where uploaded certificates and photos live.** Local disk is lost on hosts with an ephemeral filesystem; needs object storage or a persistent volume.
+- [ ] **Rate limiting**, especially on `POST /api/chat/message`, `verify-document`, and now the email-sending endpoints (`forgot-password`, booking), before any public deployment — more pressing now that real, quota-limited keys (AI and Brevo) are in play.
 - [ ] Compile TypeScript to plain JS for a production build stage (the containers still run `ts-node-dev` / the Vite dev server).
 - [ ] Revisit upgrading the backend to TypeScript 7 once `ts-node`/`ts-node-dev` support it (the backend is pinned to 5.9; the frontend already builds on 6.x).
 - [ ] Automated tests (backend integration, plus a small end-to-end suite).
-- [ ] Doctor self-registration form in the UI (API-only today).
-- [ ] Cancel/reschedule with the 48-hour rule; patient OTP login; admin user directory, emergency appointment management and reports; doctor notifications and holiday unblocking.
-- [ ] Extract a shared generic auth context now that three exist.
+- [ ] Reschedule appointments; patient OTP login (forgot/reset password by email now substitutes for part of this need — section 19); admin user directory, emergency appointment management and reports; doctor notifications and holiday unblocking.
+- [ ] An "all doctors" admin page — today only *pending* doctors are listable in the UI; an approved doctor's Login ID must be looked up directly in MongoDB if forgotten.
 - [ ] Remove or adopt the unused `shared/types.ts` and `database/seed.js` stubs.
+- [ ] A data-fix for one pre-existing doctor record with no `verificationStatus` set (predates this project phase; currently invisible to the public listing as a result) — flagged, not yet actioned.
 
 ---
 
-## 18. How to keep this doc useful
+## 27. How to keep this doc useful
 
 Add a new dated entry (or update the relevant section above) whenever:
 - A new dependency is added and there's a *reason* it was chosen over an alternative.

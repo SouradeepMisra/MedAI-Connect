@@ -6,8 +6,8 @@ An AI-assisted doctor appointment platform. Patients find a doctor, book a slot 
 
 | Role | Can do |
 |---|---|
-| **Patient** | Register and log in (email or phone + password) · search doctors by name and filter by specialization · view a doctor's profile and open slots (next 30 days) · book an appointment · view booking history · chat with an AI symptom-guidance assistant |
-| **Doctor** | Self-register with a registration certificate (starts as *Pending*) · log in with the generated Login ID once approved · view profile · set a weekly availability template (slot length, patients per slot) · block holiday dates · activate the profile so patients can book · view their appointments |
+| **Patient** | Register and log in (email or phone + password, with a forgot/reset-password email flow) · search doctors by name and filter by specialization · view a doctor's profile (photo, bio, degree, experience) and open slots (next 30 days) · book an appointment and get an email receipt · view booking history · cancel a booking up to 48 hours before it starts · chat with an AI symptom-guidance assistant |
+| **Doctor** | Self-register in the UI with a registration certificate (starts as *Pending*) · log in with the generated Login ID once approved · view profile · set a profile photo and bio for patients to see · set a weekly availability template (slot length, patients per slot) · block holiday dates · activate the profile so patients can book · view their appointments |
 | **Admin** | Log in · work through the queue of pending doctors · view the uploaded certificate · run an on-demand **AI document check** · approve or reject |
 
 ### The two AI features
@@ -35,10 +35,11 @@ An AI-assisted doctor appointment platform. Patients find a doctor, book a slot 
 
 ## Engineering highlights
 
-- **Concurrency-safe booking.** Two patients racing for the last seat can't both win: slots are created lazily, then claimed with a single conditional atomic `findOneAndUpdate` (`bookedCount < maxPatients` + `$inc`). Verified by firing simultaneous booking requests: exactly one `201`, one `409`. If saving the appointment fails after a seat is claimed, the seat is released.
-- **Role-based JWT auth** for three roles with composable `verifyToken` / `requireRole` middleware, deliberately vague login errors, bcrypt hashing, and cryptographically secure credential generation.
+- **Concurrency-safe everywhere it matters.** Booking (`bookedCount < maxPatients` + `$inc`), admin approve/reject, cancellation, and first-time chat/availability saves are all atomic conditional updates, not check-then-write. Verified by firing simultaneous requests at each: exactly one succeeds, the other gets a clean `409`. If a later step fails after a seat/slot is claimed, it's released again.
+- **Role-based JWT auth** for three roles with composable `verifyToken` / `requireRole` middleware, deliberately vague login errors, bcrypt hashing, and cryptographically secure credential generation. The server refuses to start at all if `JWT_SECRET` is unset, rather than silently signing tokens against an empty string.
 - **Human-in-the-loop AI.** AI output is advice to a person (admin / patient), never an autonomous decision.
-- **Reviewed by an automated code-review bot.** Every PR runs the Claude Code review action. It caught real bugs that were then fixed, including plaintext passwords in debug logs, a `NaN` amount bypassing validation, and a negative slot duration causing an infinite loop. The findings are written up in the [Development Log](docs/03-Development-Log.md).
+- **Reviewed by an automated code-review bot.** Every PR runs the Claude Code review action. It caught real bugs that were then fixed, including plaintext passwords in debug logs, a `NaN` amount bypassing validation, a negative slot duration causing an infinite loop, and a path-traversal risk in uploaded-document filenames. The findings are written up in the [Development Log](docs/03-Development-Log.md).
+- **Session recovery.** An expired or invalid token doesn't leave a user stuck on a broken page — any `401` clears that role's stored session and redirects to its login page automatically.
 
 ## Architecture
 
@@ -47,7 +48,8 @@ flowchart LR
     Browser["React SPA<br/>(Vite, Tailwind, React Router)"] -- "REST + JWT" --> API["Express API<br/>(TypeScript)"]
     API --> DB[("MongoDB")]
     API -- "vision + chat" --> OpenAI["AI provider<br/>(OpenAI or OpenAI-compatible, e.g. Gemini)"]
-    API --> Disk["uploads/<br/>doctor documents"]
+    API -- "transactional email" --> Brevo["Brevo<br/>(password reset, booking receipt)"]
+    API --> Disk["uploads/<br/>doctor documents + photos"]
 ```
 
 | Layer | Technology |
@@ -56,8 +58,9 @@ flowchart LR
 | Backend | Node.js 24, Express 5, TypeScript, Mongoose |
 | Database | MongoDB 7 |
 | AI | OpenAI API, or any OpenAI-compatible provider (vision model + text chat model) - e.g. Google Gemini's free tier |
-| Auth | JWT (8h), bcryptjs |
-| Uploads | Multer (disk storage, 5 MB, PDF/JPG/PNG) |
+| Email | Brevo transactional API (password reset, booking receipt) - free tier, no card |
+| Auth | JWT (8h), bcryptjs, fail-fast if `JWT_SECRET` is unset |
+| Uploads | Multer (disk storage): doctor documents (admin-gated, 5 MB, PDF/JPG/PNG) and doctor photos (public, static-served, 2 MB, JPG/PNG) |
 | Tooling | Docker Compose, GitHub Actions (Claude Code review) |
 
 More detail: [Architecture](docs/04-Architecture.md).
@@ -72,7 +75,8 @@ cd MedAI-Connect
 
 # 1. Create the backend env file (docker compose refuses to start without it)
 cp backend/.env.example backend/.env          # PowerShell: Copy-Item backend\.env.example backend\.env
-#    then open backend/.env and set JWT_SECRET (and OPENAI_API_KEY for the AI features)
+#    then open backend/.env and set JWT_SECRET (required - the server refuses to start without it),
+#    OPENAI_API_KEY for the AI features, and BREVO_API_KEY for password-reset/booking-receipt emails (all optional)
 
 # 2. Build and start MongoDB + backend + frontend
 docker compose up --build
@@ -97,11 +101,11 @@ Full instructions (running without Docker, environment variables, troubleshootin
 
 ## Try the whole flow in ~5 minutes
 
-1. **Doctor** self-registers with a certificate upload. *(Currently API-only: there is no doctor registration form in the UI yet. The walkthrough has a copy-paste `curl`.)* Status becomes *Pending*.
+1. **Doctor** self-registers at `/doctor/register` with a certificate upload. Status becomes *Pending*.
 2. **Admin** logs in at `/admin/login`, opens the pending doctor, views the certificate, optionally runs the AI check, and clicks **Approve**.
-3. **Doctor** logs in with the generated Login ID, sets availability, and clicks **Activate**.
-4. **Patient** registers at `/register`, searches for the doctor, picks a date and slot, and books.
-5. **Doctor** sees the booking under *Appointments*; **patient** sees it under *My Appointments*, and can try the *AI Symptom Chat*.
+3. **Doctor** logs in with the generated Login ID, sets availability, optionally adds a photo and bio under **Edit Profile**, and clicks **Activate**.
+4. **Patient** registers at `/register`, searches for the doctor, picks a date and slot, and books — a confirmation email arrives if `BREVO_API_KEY` is configured.
+5. **Doctor** sees the booking under *Appointments*; **patient** sees it under *My Appointments* (and can cancel it, more than 48 hours ahead of the slot), and can try the *AI Symptom Chat*.
 
 Step-by-step with screens and copy-paste `curl` commands: [End-to-End Walkthrough](docs/07-End-to-End-Walkthrough.md).
 
@@ -113,10 +117,10 @@ MedAI-Connect/
 │   └── src/
 │       ├── models/        Mongoose schemas (Patient, Doctor, Admin, DoctorAvailability, Slot, Appointment, ChatLog)
 │       ├── routes/        HTTP routes per role/feature
-│       ├── middleware/    JWT verification, role checks, file upload
-│       ├── services/      AI-backed logic (document verification, symptom chat)
-│       ├── utils/         slot generation, atomic booking, credential generation, AI provider client
-│       └── scripts/       one-off scripts (seedAdmin)
+│       ├── middleware/    JWT verification, role checks, file upload (documents + photos)
+│       ├── services/      AI-backed logic (document verification, symptom chat) and transactional email
+│       ├── utils/         slot generation, atomic booking, credential generation, JWT secret, AI provider client
+│       └── scripts/       one-off scripts (seedAdmin, seedDoctors)
 ├── frontend/           React + Vite + Tailwind SPA
 │   └── src/
 │       ├── api/           typed fetch client + per-domain API modules
@@ -148,14 +152,14 @@ There is **no automated test suite yet**. Every feature was verified by hand (AP
 
 ## Known limitations & roadmap
 
-- Doctor self-registration form in the UI (registration + certificate upload is API-only today)
-- Cancel and reschedule appointments (the PRD's 48-hour rule)
-- Patient OTP login (password login works)
-- Admin: view all users, manage/delete appointments on a doctor's emergency request, reports
+- Reschedule appointments (cancel with the PRD's 48-hour rule is done; rebooking today means cancel + book again)
+- Patient OTP login (password login, plus email-based forgot/reset password, both work)
+- Admin: an "all doctors" page (currently only *pending* doctors are listable in the UI — an already-approved doctor's Login ID must be looked up directly in MongoDB if forgotten), view all users, manage/delete appointments on a doctor's emergency request, reports
 - Doctor: clinic notifications; unblocking a holiday; the "current month locked, ask admin" rule
-- Real payment gateway (booking currently validates a minimum amount only)
-- Uploaded doctor documents are stored on local disk, so a deployment needs a persistent volume or object storage
-- Rate limiting on the AI endpoints before any public deployment
+- Real payment gateway (booking currently validates a minimum amount only; cancellation has no refund logic as a result)
+- Cancellation doesn't send an email (booking does); a doctor-notified-of-cancellation flow doesn't exist
+- Uploaded doctor documents and photos are stored on local disk, so a deployment needs a persistent volume or object storage
+- Rate limiting on the AI and email endpoints before any public deployment
 - Production build/deploy pipeline (containers currently run dev servers)
 
 ## Contributing
