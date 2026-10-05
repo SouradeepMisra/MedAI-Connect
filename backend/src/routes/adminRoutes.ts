@@ -115,24 +115,43 @@ router.patch('/doctors/:id/approve', async (req, res) => {
     }
 
     const loginId = await generateUniqueLoginId();
-    doctor.loginId = loginId;
 
     // Self-registered doctors already chose and hashed their own password at
     // registration — only generate a temp one for the (currently unused, but
     // schema-supported) case of a doctor with no password set yet, so
     // approval never discards a password the doctor already chose.
     let tempPassword: string | undefined;
+    let hashedPassword: string | undefined;
     if (!doctor.password) {
       tempPassword = generateTempPassword();
-      doctor.password = await bcrypt.hash(tempPassword, 10);
+      hashedPassword = await bcrypt.hash(tempPassword, 10);
     }
 
-    doctor.verificationStatus = 'Approved';
-    await doctor.save();
+    // Atomic conditional update — same pattern claimSlot uses for bookings.
+    // The initial findById/status check above gives a clean 404 vs. 409 on
+    // the common, non-racing path; this is what actually guarantees
+    // correctness under concurrency. If another request already flipped
+    // verificationStatus between that read and here, the filter won't
+    // match, findOneAndUpdate returns null, and the loginId/tempPassword
+    // generated above are simply never persisted — harmless, since nothing
+    // else references them.
+    const updated = await Doctor.findOneAndUpdate(
+      { _id: doctor._id, verificationStatus: 'Pending' },
+      {
+        loginId,
+        verificationStatus: 'Approved',
+        ...(hashedPassword ? { password: hashedPassword } : {}),
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(409).json({ error: 'Doctor is already Approved or Rejected' });
+    }
 
     res.status(200).json({
       message: 'Doctor approved successfully',
-      doctor: { id: doctor._id, name: doctor.name, loginId: doctor.loginId },
+      doctor: { id: updated._id, name: updated.name, loginId: updated.loginId },
       // Only present when a temp password was actually generated — in a real
       // system this would be emailed, not shown in the response. Otherwise
       // the doctor logs in with the password they chose at registration.
@@ -157,10 +176,19 @@ router.patch('/doctors/:id/reject', async (req, res) => {
       return res.status(409).json({ error: `Doctor is already ${doctor.verificationStatus}` });
     }
 
-    doctor.verificationStatus = 'Rejected';
-    await doctor.save();
+    // Same atomic conditional update as approve, for the same reason — the
+    // initial check above only gives a fast, clean error on the common path.
+    const updated = await Doctor.findOneAndUpdate(
+      { _id: doctor._id, verificationStatus: 'Pending' },
+      { verificationStatus: 'Rejected' },
+      { new: true }
+    );
 
-    res.status(200).json({ message: 'Doctor rejected', doctor: { id: doctor._id, name: doctor.name } });
+    if (!updated) {
+      return res.status(409).json({ error: 'Doctor is already Approved or Rejected' });
+    }
+
+    res.status(200).json({ message: 'Doctor rejected', doctor: { id: updated._id, name: updated.name } });
   } catch (error) {
     console.error('Doctor rejection error:', error);
     res.status(500).json({ error: 'Something went wrong while rejecting the doctor' });

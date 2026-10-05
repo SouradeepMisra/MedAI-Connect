@@ -28,8 +28,21 @@ import adminRoutes from './routes/adminRoutes';
 import doctorAvailabilityRoutes from './routes/doctorAvailabilityRoutes';
 import appointmentRoutes from './routes/appointmentRoutes';
 import chatRoutes from './routes/chatRoutes';
+import { getJwtSecret } from './utils/jwtSecret';
 
 dotenv.config();
+
+// Fail loudly and stop the process rather than running in a broken,
+// silently-failing state — same philosophy as the MongoDB connection check
+// below. Without this, a missing JWT_SECRET would only surface the first
+// time someone tries to log in, and every token would silently sign/verify
+// against an empty-string secret in the meantime (a full auth bypass).
+try {
+  getJwtSecret();
+} catch (error) {
+  console.error((error as Error).message + ' — refusing to start.');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;

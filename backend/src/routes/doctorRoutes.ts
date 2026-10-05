@@ -54,6 +54,14 @@ router.post('/register', upload.single('document'), async (req, res) => {
 
 const PUBLIC_DOCTOR_FIELDS = 'name degree specialization experience';
 
+// $regex is built from these query params below — without this, an invalid
+// fragment (e.g. search=() throws at query-execution time (an unhandled 500
+// from a public endpoint), and unescaped metacharacters silently change
+// match semantics instead of being treated as literal text.
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Public — patients browsing/searching for a doctor to book with. Only ever
 // exposes doctors who are both admin-approved and have activated their
 // profile (set up availability) — never a pending or rejected record.
@@ -67,11 +75,11 @@ router.get('/', async (req, res) => {
     };
 
     if (typeof search === 'string' && search.trim()) {
-      filter.name = { $regex: search.trim(), $options: 'i' };
+      filter.name = { $regex: escapeRegex(search.trim()), $options: 'i' };
     }
 
     if (typeof specialization === 'string' && specialization.trim()) {
-      filter.specialization = { $regex: `^${specialization.trim()}$`, $options: 'i' };
+      filter.specialization = { $regex: `^${escapeRegex(specialization.trim())}$`, $options: 'i' };
     }
 
     const doctors = await Doctor.find(filter).select(PUBLIC_DOCTOR_FIELDS);
