@@ -4,6 +4,8 @@ export interface Doctor {
   degree: string;
   specialization: string;
   experience: number;
+  bio?: string;
+  photoUrl?: string | null;
 }
 
 export interface Patient {
@@ -93,6 +95,8 @@ export interface DoctorDetail {
   verificationStatus: 'Pending' | 'Approved' | 'Rejected';
   isActivated: boolean;
   aiVerification?: AiVerification;
+  bio?: string;
+  photoUrl?: string | null;
 }
 
 export interface WeeklyScheduleEntry {

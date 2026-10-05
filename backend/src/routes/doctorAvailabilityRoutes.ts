@@ -1,8 +1,14 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { Doctor } from '../models/Doctor';
 import { DoctorAvailability } from '../models/DoctorAvailability';
 import { Appointment } from '../models/Appointment';
 import { verifyToken, requireRole, AuthenticatedRequest } from '../middleware/authMiddleware';
+import { uploadPhoto } from '../middleware/uploadMiddleware';
+
+const PHOTO_UPLOAD_DIR = path.resolve(process.cwd(), 'uploads/doctor-photos');
+const MAX_BIO_LENGTH = 1000;
 
 const router = Router();
 
@@ -20,10 +26,56 @@ router.get('/profile', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ error: 'Doctor not found' });
     }
 
-    res.status(200).json({ doctor });
+    res.status(200).json({
+      doctor: {
+        ...doctor.toObject(),
+        photoUrl: doctor.photoFilename ? `/uploads/doctor-photos/${doctor.photoFilename}` : null,
+      },
+    });
   } catch (error) {
     console.error('Fetch doctor profile error:', error);
     res.status(500).json({ error: 'Something went wrong while fetching the profile' });
+  }
+});
+
+// Self-service bio/photo update — set either, both, or neither in a single
+// request (whichever form fields/files are present get applied).
+router.patch('/profile', uploadPhoto.single('photo'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const doctor = await Doctor.findById(req.user!.id);
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    if (typeof req.body.bio === 'string') {
+      const trimmedBio = req.body.bio.trim();
+      if (trimmedBio.length > MAX_BIO_LENGTH) {
+        return res.status(400).json({ error: `Bio must be ${MAX_BIO_LENGTH} characters or fewer` });
+      }
+      doctor.bio = trimmedBio;
+    }
+
+    if (req.file) {
+      const previousFilename = doctor.photoFilename;
+      doctor.photoFilename = req.file.filename;
+
+      if (previousFilename) {
+        // Best-effort cleanup — an orphaned old photo file is harmless, so a
+        // failure here shouldn't fail the request that just succeeded.
+        fs.unlink(path.join(PHOTO_UPLOAD_DIR, previousFilename), () => {});
+      }
+    }
+
+    await doctor.save();
+
+    res.status(200).json({
+      message: 'Profile updated',
+      bio: doctor.bio,
+      photoUrl: doctor.photoFilename ? `/uploads/doctor-photos/${doctor.photoFilename}` : null,
+    });
+  } catch (error) {
+    console.error('Update doctor profile error:', error);
+    res.status(500).json({ error: 'Something went wrong while updating the profile' });
   }
 });
 

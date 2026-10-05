@@ -52,7 +52,15 @@ router.post('/register', upload.single('document'), async (req, res) => {
   }
 });
 
-const PUBLIC_DOCTOR_FIELDS = 'name degree specialization experience';
+const PUBLIC_DOCTOR_FIELDS = 'name degree specialization experience bio photoFilename';
+
+// Shared by the list and detail routes below — computes a servable photoUrl
+// from the stored filename instead of exposing the raw filename itself, so
+// the frontend never needs to know the static-serving mount convention.
+function toPublicDoctor(doctor: InstanceType<typeof Doctor>) {
+  const { photoFilename, ...rest } = doctor.toObject();
+  return { ...rest, photoUrl: photoFilename ? `/uploads/doctor-photos/${photoFilename}` : null };
+}
 
 // $regex is built from these query params below — without this, an invalid
 // fragment (e.g. search=() throws at query-execution time (an unhandled 500
@@ -83,7 +91,7 @@ router.get('/', async (req, res) => {
     }
 
     const doctors = await Doctor.find(filter).select(PUBLIC_DOCTOR_FIELDS);
-    res.status(200).json({ doctors });
+    res.status(200).json({ doctors: doctors.map(toPublicDoctor) });
   } catch (error) {
     console.error('List doctors error:', error);
     res.status(500).json({ error: 'Something went wrong while fetching doctors' });
@@ -103,7 +111,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Doctor not found' });
     }
 
-    res.status(200).json({ doctor });
+    res.status(200).json({ doctor: toPublicDoctor(doctor) });
   } catch (error) {
     console.error('Fetch doctor error:', error);
     res.status(500).json({ error: 'Something went wrong while fetching the doctor' });

@@ -21,6 +21,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import multer from 'multer';
+import path from 'path';
 import patientRoutes from './routes/patientRoutes';
 import doctorRoutes from './routes/doctorRoutes';
 import authRoutes from './routes/authRoutes';
@@ -50,6 +51,10 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(express.json());
+// Doctor profile photos are meant to be public (unlike registration
+// documents, which stay admin-gated and streamed through an authenticated
+// route), so plain static serving is the right fit here.
+app.use('/uploads/doctor-photos', express.static(path.resolve(process.cwd(), 'uploads/doctor-photos')));
 app.use('/api/patients', patientRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/auth', authRoutes);
@@ -64,14 +69,20 @@ app.get('/api/health', (req, res) => {
 
 // Every route in this app wraps its own logic in try/catch and never calls
 // next(err) itself — the only errors that currently reach here are Multer's,
-// from upload.single('document') on doctor registration (fileFilter's
+// from upload.single('document') on doctor registration and
+// uploadPhoto.single('photo') on the doctor profile update (fileFilter's
 // rejection, or the size limit). Both already carry a message written to be
 // shown to a user, so surfacing them is intentional and scoped to that —
 // this isn't a blanket "expose any thrown error" handler, since nothing else
 // in the app currently routes an error here.
+const MAX_FILE_SIZE_MB_BY_FIELD: Record<string, number> = { document: 5, photo: 2 };
 app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err instanceof multer.MulterError) {
-    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File must be 5MB or smaller' : err.message;
+    const maxSizeMb = MAX_FILE_SIZE_MB_BY_FIELD[err.field ?? ''];
+    const message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? `File must be ${maxSizeMb ?? 5}MB or smaller`
+        : err.message;
     return res.status(400).json({ error: message });
   }
   if (err instanceof Error) {
