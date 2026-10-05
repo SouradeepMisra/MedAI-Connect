@@ -1,4 +1,4 @@
-import { apiRequest, API_BASE_URL } from './client';
+import { apiRequest, API_BASE_URL, handleUnauthorized } from './client';
 import type { Admin, AiVerification, DoctorDetail, PendingDoctor } from '../types';
 
 export function adminLogin(input: { email: string; password: string }) {
@@ -45,11 +45,13 @@ export async function getDoctorDocumentBlob(
   token: string,
   doctorId: string
 ): Promise<{ blob: Blob; contentType: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/admin/doctors/${doctorId}/document`, {
+  const path = `/api/admin/doctors/${doctorId}/document`;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized(path);
     throw new Error('Failed to load document');
   }
 

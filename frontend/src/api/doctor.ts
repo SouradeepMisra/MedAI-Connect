@@ -1,4 +1,4 @@
-import { apiRequest, API_BASE_URL } from './client';
+import { apiRequest, API_BASE_URL, handleUnauthorized } from './client';
 import type { Appointment, DoctorAvailability, DoctorDetail, WeeklyScheduleEntry } from '../types';
 
 interface DoctorLoginInfo {
@@ -47,7 +47,8 @@ export async function updateDoctorProfile(
   token: string,
   formData: FormData
 ): Promise<{ message: string; bio?: string; photoUrl: string | null }> {
-  const response = await fetch(`${API_BASE_URL}/api/doctor/profile`, {
+  const path = '/api/doctor/profile';
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
@@ -56,6 +57,7 @@ export async function updateDoctorProfile(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401) handleUnauthorized(path);
     throw new Error(data?.error ?? `Request failed with status ${response.status}`);
   }
 
