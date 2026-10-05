@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { Admin } from '../models/Admin';
 import { Doctor } from '../models/Doctor';
 import { Patient } from '../models/Patient';
+import { getJwtSecret } from '../utils/jwtSecret';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.post('/admin/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: admin._id, role: 'admin' },
-      process.env.JWT_SECRET || '',
+      getJwtSecret(),
       { expiresIn: '8h' }
     );
 
@@ -67,7 +68,7 @@ router.post('/doctor/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: doctor._id, role: 'doctor' },
-      process.env.JWT_SECRET || '',
+      getJwtSecret(),
       { expiresIn: '8h' }
     );
 
@@ -110,7 +111,7 @@ router.post('/patient/login', async (req, res) => {
 
     const token = jwt.sign(
       { id: patient._id, role: 'patient' },
-      process.env.JWT_SECRET || '',
+      getJwtSecret(),
       { expiresIn: '8h' }
     );
 

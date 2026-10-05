@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../utils/jwtSecret';
 
 // Extends Express's Request type so TypeScript knows req.user might exist
 // after this middleware runs — without this, TS would complain that
@@ -19,7 +20,7 @@ export function verifyToken(req: AuthenticatedRequest, res: Response, next: Next
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || '') as { id: string; role: string };
+    const decoded = jwt.verify(token, getJwtSecret()) as { id: string; role: string };
     req.user = decoded; // attach the decoded payload so later code knows who's calling
     next(); // move on to the actual route handler
   } catch (error) {

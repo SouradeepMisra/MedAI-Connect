@@ -42,6 +42,44 @@ router.get('/appointments', async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// Upserts a doctor's availability template, and copes with the classic
+// concurrent-upsert duplicate-key race on a doctor's very first save (two
+// near-simultaneous inserts, one throws E11000 against the unique index on
+// doctor). Unlike ensureSlot/ensureChatLog, a retry here can't just re-fetch
+// the winner's document — this request's submitted values are the point of
+// the call, so on a race it retries as a plain (non-upsert) update instead,
+// applying this request's values for correct last-write-wins behavior
+// rather than silently discarding them in favor of whichever insert
+// happened to land first.
+async function saveAvailability(
+  doctorId: string,
+  update: Record<string, unknown>
+): Promise<InstanceType<typeof DoctorAvailability>> {
+  try {
+    return await DoctorAvailability.findOneAndUpdate(
+      { doctor: doctorId },
+      { doctor: doctorId, ...update },
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
+    );
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      const retried = await DoctorAvailability.findOneAndUpdate({ doctor: doctorId }, update, {
+        new: true,
+        runValidators: true,
+      });
+      // The E11000 we just caught means a document with this doctor id
+      // definitely exists, so this retry should never miss — but the
+      // update's own return type is nullable, and surfacing a clear error
+      // beats either an unsafe assertion or a silent `undefined` downstream.
+      if (!retried) {
+        throw new Error('Availability document unexpectedly missing after a duplicate-key retry');
+      }
+      return retried;
+    }
+    throw error;
+  }
+}
+
 // Create or replace the calling doctor's recurring weekly availability template.
 router.post('/availability', async (req: AuthenticatedRequest, res) => {
   try {
@@ -84,16 +122,13 @@ router.post('/availability', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'maxPatientsPerSlot must be a positive number' });
     }
 
-    const availability = await DoctorAvailability.findOneAndUpdate(
-      { doctor: req.user!.id },
-      {
-        doctor: req.user!.id,
-        weeklySchedule,
-        ...(slotDurationMinutes !== undefined ? { slotDurationMinutes } : {}),
-        ...(maxPatientsPerSlot !== undefined ? { maxPatientsPerSlot } : {}),
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
-    );
+    const update = {
+      weeklySchedule,
+      ...(slotDurationMinutes !== undefined ? { slotDurationMinutes } : {}),
+      ...(maxPatientsPerSlot !== undefined ? { maxPatientsPerSlot } : {}),
+    };
+
+    const availability = await saveAvailability(req.user!.id, update);
 
     res.status(200).json({ message: 'Availability saved', availability });
   } catch (error) {
