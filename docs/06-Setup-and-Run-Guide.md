@@ -1,9 +1,9 @@
 Document Name : Setup & Run Guide
-Version       : 1.0
+Version       : 1.1
 Author        : Souradeep Misra
 Status        : Living document
 Created Date  : 20 September 2026
-Last Updated  : 20 September 2026
+Last Updated  : 5 October 2026
 
 # Setup & Run Guide
 
@@ -53,6 +53,14 @@ It prints `Admin created: admin@medai.com / ChangeThisPassword123`, or `Admin al
 
 > The seeded credentials are a **development default**. Change the password (or the seed script) before exposing the app to anyone.
 
+**Optional: seed demo doctors.** To populate the doctor list with sample data (100 doctors across ~20 specializations, already Approved and Activated so they're immediately bookable):
+
+```bash
+docker compose exec backend npx ts-node --transpile-only src/scripts/seedDoctors.ts 100
+```
+
+All seeded doctors share the password `Seed@12345`; their individual Login IDs are printed to the console. They're tagged with a `SEED-` registration-number prefix so they're easy to find and remove later (see the script's own header comment for the cleanup command).
+
 **Check it works:**
 
 | What | Where | Expect |
@@ -78,7 +86,7 @@ docker compose exec mongodb mongosh medai-connect      # open a Mongo shell
 whatever environment it was created with. After editing `.env`, use the `--force-recreate`
 command above instead (see the [troubleshooting table](#6-troubleshooting) if this bites you).
 
-Source folders are bind-mounted into the containers, so edits to `backend/src` and `frontend/src` reload automatically. Uploaded doctor documents land in `backend/uploads/` on your own disk (gitignored), so they survive container restarts.
+Source folders are bind-mounted into the containers, so edits to `backend/src` and `frontend/src` reload automatically. Uploaded doctor documents and photos land in `backend/uploads/` on your own disk (gitignored), so they survive container restarts.
 
 ## 3. Environment variables
 
@@ -92,6 +100,9 @@ Source folders are bind-mounted into the containers, so edits to `backend/src` a
 | `OPENAI_BASE_URL` | no | OpenAI's API | Points the client at a different OpenAI-compatible endpoint (e.g. Gemini's free tier). Unset = real OpenAI. |
 | `OPENAI_VISION_MODEL` | no | `gpt-4o` | Model that reads doctor documents (must accept images). Must be a model your chosen provider actually offers. |
 | `OPENAI_CHAT_MODEL` | no | `gpt-4o-mini` | Model behind the symptom chat. Same caveat. |
+| `BREVO_API_KEY` | for email features | none | Sends the forgot-password email and the booking-confirmation receipt via Brevo's transactional API (free tier, 300/day, no card). Without it, those two features fail cleanly (a `500` on forgot-password; the booking still succeeds, just without an email) instead of crashing. See [section 4a](#4a-email-brevo). |
+| `BREVO_SENDER_EMAIL` | for email features | none | Must be a sender verified in your Brevo account (Settings → Senders). |
+| `BREVO_SENDER_NAME` | no | `MedAI Connect` | Display name on sent emails. |
 | `MIN_BOOKING_AMOUNT` | no | `100` | Minimum amount accepted when booking. |
 | `FRONTEND_URL` | no | `http://localhost:5173` | The one origin allowed to call the API from a browser (CORS). Must match exactly, including port. |
 | `PORT` | no | `5000` | API port (Compose sets it). |
@@ -141,6 +152,22 @@ Google's Gemini API has a real no-credit-card free tier (via [Google AI Studio](
 
 If you deploy publicly, anyone can register and use these endpoints, so cap your budget/quota and add rate limiting first (see the README roadmap).
 
+## 4a. Email (Brevo)
+
+Powers two features: the patient forgot/reset-password flow, and the booking-confirmation email receipt. Both are optional — without a working key, forgot-password returns a clean `500` and booking still succeeds without sending a receipt (the failure is only logged server-side).
+
+1. Sign up free at https://app.brevo.com (no card required). If the signup form asks for a company name and you don't have one, any text works — it isn't validated against a real company.
+2. **Verify a sender:** Settings → Senders, Domains & IPs → Senders tab → Add a Sender. Use any email you can receive mail at (your own personal inbox is fine) — Brevo emails a confirmation link there.
+3. **Generate an API key:** your profile icon → SMTP & API → API Keys tab → Generate a new API key.
+4. In `backend/.env`:
+   ```
+   BREVO_API_KEY=xkeysib-...
+   BREVO_SENDER_EMAIL=your-verified-sender@example.com
+   BREVO_SENDER_NAME=MedAI Connect
+   ```
+5. Recreate the backend so it picks up the new values (`restart` doesn't — see the note in section 2): `docker compose up -d --force-recreate backend`.
+6. Verify: use **Forgot password** on the login page with a registered patient's email, confirm it arrives; then book an appointment as that patient and confirm the receipt arrives too.
+
 ## 5. Run without Docker
 
 Useful if you'd rather use your own Node and MongoDB.
@@ -188,12 +215,16 @@ cd frontend && npm run build          # tsc -b + vite build
 | Port already in use (`5173`, `5000`, `27017`) | Another process holds it. Stop it, or change the left side of the port mapping in `docker-compose.yml`. |
 | Warning: `the attribute 'version' is obsolete` | Harmless. Newer Compose ignores the field. |
 | Logged in as a patient but an admin/doctor page redirects to its login | Each role keeps a separate session (`medai_patient_auth`, `medai_doctor_auth`, `medai_admin_auth` in localStorage). Log in on that role's own page. |
+| Admin/doctor/patient page shows "Invalid or expired token" | Your token outlived the 8h JWT lifetime. This now **recovers automatically**: any `401` clears that role's stored session and redirects you to its login page — just log in again. (If you're on an older build without this fix, clear the relevant `localStorage` key yourself or go directly to that role's `/login` URL.) |
+| Forgot-password email never arrives, or booking succeeds but no receipt email shows up | `BREVO_API_KEY`/`BREVO_SENDER_EMAIL` are unset, wrong, or the sender isn't verified yet in Brevo. Check `docker compose logs backend` for a line starting `Password reset email send failed:` / `Booking receipt email send failed:` — the real cause (e.g. `401 Key not found`) is logged there even though the client never sees it. See [section 4a](#4a-email-brevo). |
 
 ## 7. Resetting to a clean slate
 
 ```bash
 docker compose down -v                       # containers + MongoDB data
 rm -rf backend/uploads/doctor-documents/*    # uploaded certificates (PowerShell: Remove-Item backend\uploads\doctor-documents\* )
+rm -rf backend/uploads/doctor-photos/*       # uploaded profile photos (PowerShell: Remove-Item backend\uploads\doctor-photos\* )
 docker compose up --build
 docker compose exec backend npx ts-node src/scripts/seedAdmin.ts
+docker compose exec backend npx ts-node --transpile-only src/scripts/seedDoctors.ts 100   # optional, demo data
 ```

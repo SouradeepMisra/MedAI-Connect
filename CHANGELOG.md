@@ -2,7 +2,63 @@
 
 All notable changes to this project are documented in this file. Entries are grouped by merged pull request, newest first. The reasoning behind each change lives in the [Development Log](docs/03-Development-Log.md).
 
-## Unreleased
+## 2026-10-05 - Session-expiry auto-recovery (#18)
+
+### Fixed
+- A stale/expired token in localStorage let a user reach a protected page, which then just failed with a raw 401 error and no way back to the login page. Any 401 now clears that role's stored session and redirects to its login page automatically.
+
+## 2026-10-05 - Booking confirmation email receipt (#17)
+
+### Added
+- A booking confirmation email (doctor, date, time, amount, cancellation-policy reminder) is sent via Brevo when a patient books. Non-blocking: a send failure is logged, never surfaces to the client or affects the booking response.
+
+## 2026-10-05 - Doctor photo + bio (#16)
+
+### Added
+- Doctors can set a profile photo and bio from their dashboard (`PATCH /api/doctor/profile`, multipart). Shown on the public doctor list, doctor cards, and profile page; falls back to an initials avatar when unset.
+
+## 2026-10-05 - Cancel appointment, 48-hour rule (#15)
+
+### Added
+- `PATCH /api/appointments/:id/cancel` (patient-only). Rejects within 48 hours of the appointment or if it's not currently `Booked`; releases the slot's seat on success. `MyAppointmentsPage` shows a Cancel button only on appointments more than 48 hours out.
+
+## 2026-10-05 - UI polish (#14)
+
+### Changed
+- Consistent teal brand accent across the app (buttons, links, focus rings, active nav state), replacing ad-hoc black/slate. Added a shared footer, initials avatars on doctor cards, and styled empty/error states.
+
+## 2026-10-05 - Auth-context consolidation (#12)
+
+### Changed
+- `AuthContext`, `AdminAuthContext` and `DoctorAuthContext` were three copies of the same ~60-line implementation; extracted into one `createAuthContext<TUser>(storageKey)` factory. No change to any hook name, returned field, or behavior.
+
+## 2026-10-05 - Forgot password via email (#13)
+
+### Added
+- Patient-only forgot/reset password flow (`POST /api/auth/patient/forgot-password`, `POST /api/auth/patient/reset-password`), emailed via Brevo's transactional API. Single-use, 1-hour-expiry token stored as a sha256 hash, never the raw token. No user enumeration: the forgot-password response is identical whether or not the email matches an account.
+
+## 2026-10-05 - Security and concurrency fixes (#11)
+
+### Fixed
+- `JWT_SECRET` silently defaulted to `''` if unset, meaning a missing env var was a full auth bypass. The server now fails fast at startup instead.
+- Admin approve/reject, the first chat message, and the first availability save were all non-atomic read-then-write races; rewritten as atomic conditional updates/upserts.
+- Doctor search/specialization query params went straight into `$regex` unescaped, letting a malformed value 500 a public endpoint. Now escaped.
+
+## 2026-10-05 - Doctor registration UI (#10)
+
+### Added
+- A doctor registration form in the UI (`/doctor/register`) — self-registration was previously API-only.
+
+### Fixed
+- Uploaded document filenames were derived from the client-supplied `originalname` (path traversal risk); now derived from a validated mimetype plus a random suffix.
+- An unhandled file-upload error (wrong type, too large) could leak a raw stack trace; now returns a clean `400`.
+
+## 2026-10-04 - Configurable AI provider (#9)
+
+### Added
+- `OPENAI_BASE_URL` setting so the existing OpenAI SDK client can point at any OpenAI-compatible endpoint. Verified live against a real, free Google Gemini key for both AI features (document verification and symptom chat).
+
+## 2026-10-04 - Documentation pass (#8)
 
 ### Added
 - Project documentation: rewritten README, architecture, API reference, setup and run guide, end-to-end walkthrough, PRD implementation status, milestone log.

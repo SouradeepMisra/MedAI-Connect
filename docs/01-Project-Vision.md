@@ -1,10 +1,10 @@
 Document Name : Project Vision
-Version       : 2.0
+Version       : 2.1
 Author        : Souradeep Misra
 Reviewer      : ChatGPT (Technical Architect)
-Status        : Living document (v1 delivered)
+Status        : Living document (v1 delivered, v1.1 adds the first round of end-user-requested features)
 Created Date  : 30 June 2026
-Last Updated  : 20 September 2026
+Last Updated  : 5 October 2026
 
 # Project Name
 
@@ -59,19 +59,19 @@ These shaped the decisions recorded in the [Development Log](03-Development-Log.
 1. **AI assists, a human decides.** AI reads a certificate and flags mismatches for an admin; it does not approve doctors. The symptom assistant gives general guidance and always points to a real doctor. No autonomous decisions on anything medical.
 2. **Correctness where it matters.** Double booking is the classic failure of an appointment system, so booking is a single atomic database operation rather than check-then-write.
 3. **Simple and defensible over clever.** Plain `fetch` + Context instead of a state-management stack, on-demand AI calls instead of automatic ones, tightly scoped PRs.
-4. **Honest about limits.** Mocked payment, no OTP, no cancellation yet: each is written down, not hidden.
+4. **Honest about limits.** Mocked payment, no OTP, no reschedule: each is written down, not hidden.
 
 ## What has been delivered (v1)
 
 | Area | Delivered |
 |---|---|
-| Patient | Register/login, doctor search and filter, profile, slot browsing (30 days), booking, booking history, AI symptom-guidance chat |
-| Doctor | Self-registration with certificate upload, approved login, dashboard, weekly availability and holiday blocking, activation, appointment list |
+| Patient | Register/login (plus forgot/reset password by email), doctor search and filter, profile, slot browsing (30 days), booking with an email receipt, booking history, cancel a booking (48-hour rule), AI symptom-guidance chat |
+| Doctor | Self-registration with certificate upload **in the UI**, approved login, dashboard with a photo and bio, weekly availability and holiday blocking, activation, appointment list |
 | Admin | Verification queue, certificate viewer, on-demand AI document check, approve/reject |
-| Platform | Concurrency-safe booking, role-based JWT auth, Docker Compose environment, automated AI code review on every PR |
+| Platform | Concurrency-safe booking *and* cancellation *and* approval, role-based JWT auth (fail-fast on a missing secret), automatic session recovery on an expired token, Docker Compose environment, automated AI code review on every PR |
 
 Requirement-by-requirement status is in the [Product Requirement Document](02-Product-Requirement-Document.md#implementation-status); how the pieces fit together is in [Architecture](04-Architecture.md).
 
 ## What is next
 
-Cancel/reschedule, patient OTP login, the remaining admin tools (user directory, emergency appointment management, reports), a doctor registration form in the UI, automated tests, and a public deployment. See the README roadmap.
+Reschedule, patient OTP login, the remaining admin tools (an "all doctors" page, user directory, emergency appointment management, reports), automated tests, and a public deployment. See the README roadmap.
