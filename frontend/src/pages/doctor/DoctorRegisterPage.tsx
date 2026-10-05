@@ -98,7 +98,7 @@ export function DoctorRegisterPage() {
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -108,7 +108,7 @@ export function DoctorRegisterPage() {
             required
             value={registrationNumber}
             onChange={(e) => setRegistrationNumber(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -119,7 +119,7 @@ export function DoctorRegisterPage() {
             placeholder="e.g. MBBS, MD"
             value={degree}
             onChange={(e) => setDegree(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -129,7 +129,7 @@ export function DoctorRegisterPage() {
             required
             value={specialization}
             onChange={(e) => setSpecialization(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -140,7 +140,7 @@ export function DoctorRegisterPage() {
             min={0}
             value={experience}
             onChange={(e) => setExperience(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -150,7 +150,7 @@ export function DoctorRegisterPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -160,7 +160,7 @@ export function DoctorRegisterPage() {
             required
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <div>
@@ -170,24 +170,24 @@ export function DoctorRegisterPage() {
             required
             accept=".pdf,.jpg,.jpeg,.png"
             onChange={handleFileChange}
-            className="mt-1 w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-sm file:text-white hover:file:bg-slate-700"
+            className="mt-1 w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-teal-600 file:px-3 file:py-1.5 file:text-sm file:text-white hover:file:bg-teal-700"
           />
           <p className="mt-1 text-xs text-slate-400">PDF, JPG, or PNG, up to 5MB.</p>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="w-full rounded-md bg-teal-600 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
         >
           {submitting ? 'Submitting...' : 'Submit Registration'}
         </button>
       </form>
       <p className="mt-4 text-center text-sm text-slate-500">
         Already approved?{' '}
-        <Link to="/doctor/login" className="text-slate-900 underline">
+        <Link to="/doctor/login" className="text-teal-600 underline hover:text-teal-700">
           Log in
         </Link>
       </p>

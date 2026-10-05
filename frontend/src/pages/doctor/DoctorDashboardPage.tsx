@@ -40,7 +40,13 @@ export function DoctorDashboardPage() {
   }
 
   if (loading) return <p className="mx-auto max-w-3xl px-6 py-10 text-sm text-slate-500">Loading...</p>;
-  if (error) return <p className="mx-auto max-w-3xl px-6 py-10 text-sm text-red-600">{error}</p>;
+  if (error) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+      </div>
+    );
+  }
   if (!profile) return null;
 
   return (
@@ -81,18 +87,18 @@ export function DoctorDashboardPage() {
             {!hasAvailability && (
               <p className="text-sm text-slate-600">
                 Set your{' '}
-                <Link to="/doctor/availability" className="text-slate-900 underline">
+                <Link to="/doctor/availability" className="text-teal-600 underline hover:text-teal-700">
                   availability
                 </Link>{' '}
                 before activating.
               </p>
             )}
-            {activateError && <p className="mt-2 text-sm text-red-600">{activateError}</p>}
+            {activateError && <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{activateError}</div>}
             <button
               type="button"
               onClick={handleActivate}
               disabled={!hasAvailability || activating}
-              className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+              className="mt-3 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
             >
               {activating ? 'Activating...' : 'Activate'}
             </button>

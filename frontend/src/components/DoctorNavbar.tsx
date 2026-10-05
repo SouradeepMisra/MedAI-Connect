@@ -1,5 +1,9 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useDoctorAuth } from '../context/DoctorAuthContext';
+
+function navLinkClass({ isActive }: { isActive: boolean }) {
+  return isActive ? 'font-medium text-teal-600' : 'text-slate-600 hover:text-teal-600';
+}
 
 export function DoctorNavbar() {
   const { doctor, logout } = useDoctorAuth();
@@ -17,20 +21,20 @@ export function DoctorNavbar() {
       </Link>
       {doctor && (
         <div className="flex items-center gap-6 text-sm">
-          <Link to="/doctor" className="text-slate-600 hover:text-slate-900">
+          <NavLink to="/doctor" end className={navLinkClass}>
             Dashboard
-          </Link>
-          <Link to="/doctor/availability" className="text-slate-600 hover:text-slate-900">
+          </NavLink>
+          <NavLink to="/doctor/availability" className={navLinkClass}>
             Availability
-          </Link>
-          <Link to="/doctor/appointments" className="text-slate-600 hover:text-slate-900">
+          </NavLink>
+          <NavLink to="/doctor/appointments" className={navLinkClass}>
             Appointments
-          </Link>
+          </NavLink>
           <span className="text-slate-500">Dr. {doctor.name}</span>
           <button
             type="button"
             onClick={handleLogout}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-white hover:bg-slate-700"
+            className="rounded-md bg-teal-600 px-3 py-1.5 text-white hover:bg-teal-700"
           >
             Logout
           </button>

@@ -115,7 +115,13 @@ export function AdminDoctorDetailPage() {
   }
 
   if (loading) return <p className="mx-auto max-w-4xl px-6 py-10 text-sm text-slate-500">Loading...</p>;
-  if (loadError) return <p className="mx-auto max-w-4xl px-6 py-10 text-sm text-red-600">{loadError}</p>;
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-4xl px-6 py-10">
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{loadError}</div>
+      </div>
+    );
+  }
   if (!doctor) return null;
 
   const aiVerification = doctor.aiVerification;
@@ -156,7 +162,7 @@ export function AdminDoctorDetailPage() {
         {/* Document */}
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Uploaded Document</h2>
-          {documentError && <p className="mt-3 text-sm text-red-600">{documentError}</p>}
+          {documentError && <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{documentError}</div>}
           {!documentError && !documentUrl && <p className="mt-3 text-sm text-slate-500">Loading document...</p>}
           {documentUrl && documentContentType.startsWith('image/') && (
             <img src={documentUrl} alt="Uploaded registration document" className="mt-3 max-h-64 w-full rounded-md border border-slate-200 object-contain" />
@@ -165,7 +171,7 @@ export function AdminDoctorDetailPage() {
             <a
               href={documentUrl}
               download
-              className="mt-3 inline-block rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
+              className="mt-3 inline-block rounded-md bg-teal-600 px-3 py-1.5 text-sm text-white hover:bg-teal-700"
             >
               Download document
             </a>
@@ -181,20 +187,20 @@ export function AdminDoctorDetailPage() {
             type="button"
             onClick={handleRunVerification}
             disabled={verifying}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
+            className="rounded-md bg-teal-600 px-3 py-1.5 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
           >
             {verifying ? 'Running...' : aiVerification && aiVerification.status !== 'NotRun' ? 'Re-run Verification' : 'Run AI Verification'}
           </button>
         </div>
 
-        {verifyError && <p className="mt-3 text-sm text-red-600">{verifyError}</p>}
+        {verifyError && <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{verifyError}</div>}
 
         {(!aiVerification || aiVerification.status === 'NotRun') && !verifying && (
           <p className="mt-3 text-sm text-slate-500">No AI verification has been run yet.</p>
         )}
 
         {aiVerification?.status === 'Failed' && (
-          <p className="mt-3 text-sm text-red-600">{aiVerification.errorMessage}</p>
+          <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aiVerification.errorMessage}</div>
         )}
 
         {aiVerification?.status === 'Completed' && (
@@ -257,7 +263,7 @@ export function AdminDoctorDetailPage() {
         </div>
       )}
 
-      {actionError && <p className="mt-3 text-sm text-red-600">{actionError}</p>}
+      {actionError && <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>}
 
       {approvalResult && (
         <div className="mt-6 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">

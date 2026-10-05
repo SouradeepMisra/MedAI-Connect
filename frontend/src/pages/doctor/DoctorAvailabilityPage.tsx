@@ -159,14 +159,14 @@ export function DoctorAvailabilityPage() {
           </div>
         </div>
 
-        {saveError && <p className="mt-3 text-sm text-red-600">{saveError}</p>}
+        {saveError && <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</div>}
         {saved && <p className="mt-3 text-sm text-green-600">Availability saved.</p>}
 
         <button
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="mt-4 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save Availability'}
         </button>
@@ -198,12 +198,12 @@ export function DoctorAvailabilityPage() {
             type="button"
             onClick={handleBlockHoliday}
             disabled={blockingHoliday}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 disabled:opacity-50"
+            className="rounded-md bg-teal-600 px-3 py-1.5 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
           >
             {blockingHoliday ? 'Blocking...' : 'Block this date'}
           </button>
         </div>
-        {holidayError && <p className="mt-2 text-sm text-red-600">{holidayError}</p>}
+        {holidayError && <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{holidayError}</div>}
       </div>
     </div>
   );

@@ -31,7 +31,7 @@ export function MyAppointmentsPage() {
       <h1 className="text-2xl font-semibold text-slate-900">My Appointments</h1>
 
       {loading && <p className="mt-6 text-sm text-slate-500">Loading...</p>}
-      {error && <p className="mt-6 text-sm text-red-600">{error}</p>}
+      {error && <div className="mt-6 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       {!loading && !error && appointments.length === 0 && (
         <p className="mt-6 text-sm text-slate-500">You haven't booked any appointments yet.</p>
