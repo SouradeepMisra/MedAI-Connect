@@ -3,9 +3,11 @@ import { Doctor } from '../models/Doctor';
 import { DoctorAvailability } from '../models/DoctorAvailability';
 import { Slot } from '../models/Slot';
 import { Appointment } from '../models/Appointment';
+import { Patient } from '../models/Patient';
 import { verifyToken, requireRole, AuthenticatedRequest } from '../middleware/authMiddleware';
 import { getCandidateTimes } from '../utils/slotGenerator';
 import { ensureSlot, claimSlot, releaseSlot } from '../utils/slotBooking';
+import { sendBookingReceiptEmail } from '../services/emailService';
 
 const router = Router();
 
@@ -204,6 +206,32 @@ router.post('/book', verifyToken, requireRole('patient'), async (req: Authentica
       // permanently short one seat with nothing to show for it.
       await releaseSlot(claimed._id.toString());
       throw createError;
+    }
+
+    // Courtesy email, not a precondition — the booking above already fully
+    // succeeded (slot claimed, appointment created), so a send failure here
+    // is only logged, never surfaced to the client or allowed to affect the
+    // 201 response.
+    try {
+      const patient = await Patient.findById(req.user!.id).select('name email');
+      if (patient) {
+        await sendBookingReceiptEmail(patient.email, {
+          patientName: patient.name,
+          doctorName: result.doctor.name,
+          specialization: result.doctor.specialization,
+          date: date.toLocaleDateString('en-US', {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            timeZone: 'UTC',
+          }),
+          time,
+          amount: numericAmount,
+        });
+      }
+    } catch (emailError) {
+      console.error('Booking receipt email send failed:', emailError);
     }
 
     res.status(201).json({ message: 'Appointment booked', appointment });
