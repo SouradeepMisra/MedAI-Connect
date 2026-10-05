@@ -19,3 +19,17 @@ export function loginPatient(input: { identifier: string; password: string }) {
     { method: 'POST', body: input }
   );
 }
+
+export function requestPasswordReset(input: { email: string }) {
+  return apiRequest<{ message: string }>('/api/auth/patient/forgot-password', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export function resetPassword(input: { token: string; password: string }) {
+  return apiRequest<{ message: string }>('/api/auth/patient/reset-password', {
+    method: 'POST',
+    body: input,
+  });
+}
