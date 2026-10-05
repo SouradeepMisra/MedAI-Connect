@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { API_BASE_URL } from '../../api/client';
 import { activateDoctor, getAvailability, getProfile } from '../../api/doctor';
 import { useDoctorAuth } from '../../context/DoctorAuthContext';
 import type { DoctorDetail } from '../../types';
@@ -51,8 +52,24 @@ export function DoctorDashboardPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-slate-900">Dr. {profile.name}</h1>
-      <p className="mt-1 text-slate-500">{profile.specialization}</p>
+      <div className="flex items-center gap-4">
+        {profile.photoUrl ? (
+          <img
+            src={`${API_BASE_URL}${profile.photoUrl}`}
+            alt="Profile"
+            className="h-16 w-16 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-50 text-xl font-semibold text-teal-700">
+            {profile.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Dr. {profile.name}</h1>
+          <p className="text-slate-500">{profile.specialization}</p>
+        </div>
+      </div>
+      {profile.bio && <p className="mt-4 text-sm text-slate-600">{profile.bio}</p>}
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Profile</h2>
@@ -120,6 +137,13 @@ export function DoctorDashboardPage() {
         >
           <h3 className="font-medium text-slate-900">View Appointments</h3>
           <p className="mt-1 text-sm text-slate-500">See your upcoming patient bookings.</p>
+        </Link>
+        <Link
+          to="/doctor/profile/edit"
+          className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md"
+        >
+          <h3 className="font-medium text-slate-900">Edit Profile</h3>
+          <p className="mt-1 text-sm text-slate-500">Set your photo and bio for patients to see.</p>
         </Link>
       </div>
     </div>

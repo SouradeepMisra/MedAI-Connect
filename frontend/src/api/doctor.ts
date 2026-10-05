@@ -41,6 +41,27 @@ export function getProfile(token: string) {
   return apiRequest<{ doctor: DoctorDetail }>('/api/doctor/profile', { token });
 }
 
+// Multipart, same reasoning as registerDoctor above — bypasses apiRequest's
+// forced JSON content-type.
+export async function updateDoctorProfile(
+  token: string,
+  formData: FormData
+): Promise<{ message: string; bio?: string; photoUrl: string | null }> {
+  const response = await fetch(`${API_BASE_URL}/api/doctor/profile`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error ?? `Request failed with status ${response.status}`);
+  }
+
+  return data;
+}
+
 export function getAvailability(token: string) {
   // 404 (no template yet) is a normal, expected state here, not an error to
   // surface — callers treat "no template" as null rather than a failure.

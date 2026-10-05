@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { API_BASE_URL } from '../api/client';
 import { getDoctor, getSlots } from '../api/doctors';
 import { bookAppointment } from '../api/appointments';
 import { useAuth } from '../context/AuthContext';
@@ -97,11 +98,27 @@ export function DoctorProfilePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-slate-900">Dr. {doctor.name}</h1>
-      <p className="mt-1 text-slate-500">{doctor.specialization}</p>
-      <p className="mt-2 text-sm text-slate-600">
-        {doctor.degree} &middot; {doctor.experience} years of experience
-      </p>
+      <div className="flex items-center gap-4">
+        {doctor.photoUrl ? (
+          <img
+            src={`${API_BASE_URL}${doctor.photoUrl}`}
+            alt=""
+            className="h-20 w-20 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-50 text-2xl font-semibold text-teal-700">
+            {doctor.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Dr. {doctor.name}</h1>
+          <p className="text-slate-500">{doctor.specialization}</p>
+          <p className="text-sm text-slate-600">
+            {doctor.degree} &middot; {doctor.experience} years of experience
+          </p>
+        </div>
+      </div>
+      {doctor.bio && <p className="mt-4 text-sm text-slate-600">{doctor.bio}</p>}
 
       <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">

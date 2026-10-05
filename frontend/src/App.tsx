@@ -24,6 +24,7 @@ import { DoctorLoginPage } from './pages/doctor/DoctorLoginPage';
 import { DoctorRegisterPage } from './pages/doctor/DoctorRegisterPage';
 import { DoctorDashboardPage } from './pages/doctor/DoctorDashboardPage';
 import { DoctorAvailabilityPage } from './pages/doctor/DoctorAvailabilityPage';
+import { DoctorProfileEditPage } from './pages/doctor/DoctorProfileEditPage';
 import { DoctorAppointmentsPage } from './pages/doctor/DoctorAppointmentsPage';
 
 function PatientLayout() {
@@ -97,6 +98,7 @@ function App() {
                   <Route path="/doctor" element={<DoctorDashboardPage />} />
                   <Route path="/doctor/availability" element={<DoctorAvailabilityPage />} />
                   <Route path="/doctor/appointments" element={<DoctorAppointmentsPage />} />
+                  <Route path="/doctor/profile/edit" element={<DoctorProfileEditPage />} />
                 </Route>
               </Route>
             </Routes>

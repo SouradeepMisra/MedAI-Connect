@@ -38,6 +38,16 @@ const doctorSchema = new mongoose.Schema(
       type: String,
       required: true, // path to the uploaded certificate/registration document
     },
+    bio: {
+      type: String,
+      maxlength: 1000,
+    },
+    // Just the generated filename (not a full path) — the public photo URL
+    // is built from this plus the static-serving mount point, so nothing
+    // here ever leaks filesystem structure the way documentPath does.
+    photoFilename: {
+      type: String,
+    },
     verificationStatus: {
       type: String,
       enum: ['Pending', 'Approved', 'Rejected'],
