@@ -1,12 +1,20 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { Admin } from '../models/Admin';
 import { Doctor } from '../models/Doctor';
 import { Patient } from '../models/Patient';
 import { getJwtSecret } from '../utils/jwtSecret';
+import { sendPasswordResetEmail } from '../services/emailService';
 
 const router = Router();
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function hashResetToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 router.post('/admin/login', async (req, res) => {
   try {
@@ -123,6 +131,77 @@ router.post('/patient/login', async (req, res) => {
   } catch (error) {
     console.error('Patient login error:', error);
     res.status(500).json({ error: 'Something went wrong during login' });
+  }
+});
+
+const FORGOT_PASSWORD_GENERIC_MESSAGE =
+  'If an account exists for that email, a password reset link has been sent.';
+
+// Always responds with the same generic message regardless of whether the
+// email matches an account — revealing that would let an attacker enumerate
+// registered emails. Only sends anything when it does match.
+router.post('/patient/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const patient = await Patient.findOne({ email });
+    if (patient) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      patient.passwordResetTokenHash = hashResetToken(rawToken);
+      patient.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+      await patient.save();
+
+      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+
+      try {
+        await sendPasswordResetEmail(patient.email, resetUrl);
+      } catch (emailError) {
+        // The account genuinely can't proceed without this email, so unlike
+        // the generic "account not found" case above, this is a real error —
+        // but the response still shouldn't say why, to avoid leaking config
+        // details to the client.
+        console.error('Password reset email send failed:', emailError);
+        return res.status(500).json({ error: 'Something went wrong while sending the reset email' });
+      }
+    }
+
+    res.status(200).json({ message: FORGOT_PASSWORD_GENERIC_MESSAGE });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+
+router.post('/patient/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    const patient = await Patient.findOne({
+      passwordResetTokenHash: hashResetToken(token),
+      passwordResetExpires: { $gt: new Date() },
+    });
+
+    if (!patient) {
+      return res.status(400).json({ error: 'Invalid or expired reset link' });
+    }
+
+    patient.password = await bcrypt.hash(password, 10);
+    patient.passwordResetTokenHash = undefined;
+    patient.passwordResetExpires = undefined;
+    await patient.save();
+
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Something went wrong while resetting the password' });
   }
 });
 
