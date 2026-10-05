@@ -10,6 +10,7 @@ import { ensureSlot, claimSlot, releaseSlot } from '../utils/slotBooking';
 const router = Router();
 
 const BOOKING_WINDOW_DAYS = 30;
+const CANCELLATION_WINDOW_HOURS = 48;
 
 // Normalizes an incoming date string to UTC midnight so it can be compared
 // and stored consistently, regardless of what time-of-day was in the string.
@@ -209,6 +210,61 @@ router.post('/book', verifyToken, requireRole('patient'), async (req: Authentica
   } catch (error) {
     console.error('Book appointment error:', error);
     res.status(500).json({ error: 'Something went wrong while booking the appointment' });
+  }
+});
+
+// Combines the stored (UTC-midnight) date with the "HH:mm" time string into
+// the actual appointment moment, for the 48-hour cancellation check.
+function appointmentDateTime(date: Date, time: string): Date {
+  const [hours, minutes] = time.split(':').map(Number);
+  const combined = new Date(date);
+  combined.setUTCHours(hours, minutes, 0, 0);
+  return combined;
+}
+
+// Patient cancels their own booking. Also naturally rejects cancelling an
+// appointment that's already in the past, since that's always well under the
+// 48-hour window.
+router.patch('/:id/cancel', verifyToken, requireRole('patient'), async (req: AuthenticatedRequest, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment || appointment.patient.toString() !== req.user!.id) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    if (appointment.status !== 'Booked') {
+      return res.status(409).json({ error: `This appointment is already ${appointment.status}` });
+    }
+
+    const hoursUntilAppointment =
+      (appointmentDateTime(appointment.date, appointment.time).getTime() - Date.now()) / (60 * 60 * 1000);
+
+    if (hoursUntilAppointment < CANCELLATION_WINDOW_HOURS) {
+      return res.status(400).json({
+        error: `Appointments can only be cancelled at least ${CANCELLATION_WINDOW_HOURS} hours in advance`,
+      });
+    }
+
+    // Atomic conditional update — same pattern as admin approve/reject. If
+    // another request already cancelled this appointment between the check
+    // above and here, the filter won't match and this returns null.
+    const updated = await Appointment.findOneAndUpdate(
+      { _id: appointment._id, patient: req.user!.id, status: 'Booked' },
+      { status: 'Cancelled' },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(409).json({ error: 'This appointment is already cancelled' });
+    }
+
+    await releaseSlot(updated.slot.toString());
+
+    res.status(200).json({ message: 'Appointment cancelled', appointment: updated });
+  } catch (error) {
+    console.error('Cancel appointment error:', error);
+    res.status(500).json({ error: 'Something went wrong while cancelling the appointment' });
   }
 });
 
