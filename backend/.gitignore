@@ -17,5 +17,8 @@ pnpm-debug.log*
 # Uploaded files
 /uploads/
 
+# Local-only demo-data seed script, kept untracked on purpose
+src/scripts/seedDoctors.ts
+
 # Committed template - copy to .env and fill in real values
 !.env.example
